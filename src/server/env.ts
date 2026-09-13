@@ -23,6 +23,11 @@ const schema = z
     APP_URL: z
       .url({ error: 'use a URL completa, ex.: https://ingressos.conquistapark.com.br' })
       .default('http://localhost:3000'),
+    /** Parque vendido pelo site público desta instalação. */
+    PARK_SLUG: z
+      .string()
+      .regex(/^[a-z0-9-]{2,60}$/, 'use letras minúsculas, números e hífen')
+      .default('conquista-park'),
     DATABASE_URL: z.string({ error: 'obrigatória' }).min(1, 'obrigatória'),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
