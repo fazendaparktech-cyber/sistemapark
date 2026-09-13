@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   output: 'standalone',
+  // Sem o selo do Next.js sobre a interface durante o desenvolvimento.
+  devIndicators: false,
   async headers() {
     return [
       { source: '/:path*', headers: cabecalhosDeSeguranca },

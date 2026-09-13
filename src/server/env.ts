@@ -8,6 +8,15 @@ import { z } from '@/lib/validation';
  * variáveis de ambiente — nunca no código nem no repositório.
  */
 
+const CHAVES_OBRIGATORIAS_EM_PRODUCAO = [
+  'QR_SIGNING_KEY',
+  'ORDER_LINK_KEY',
+  'CPF_HASH_KEY',
+  'CRON_SECRET',
+] as const;
+
+const chave = z.string().min(32, 'use pelo menos 32 caracteres').optional();
+
 const schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -20,6 +29,11 @@ const schema = z
     EMAIL_PROVIDER: z.enum(['mock', 'resend']).default('mock'),
     EMAIL_FROM: z.string().min(3).default('Conquista Park <nao-responda@example.com>'),
     RESEND_API_KEY: z.string().min(1).optional(),
+    PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
+    QR_SIGNING_KEY: chave,
+    ORDER_LINK_KEY: chave,
+    CPF_HASH_KEY: chave,
+    CRON_SECRET: chave,
   })
   .superRefine((valores, ctx) => {
     if (valores.EMAIL_PROVIDER === 'resend' && !valores.RESEND_API_KEY) {
@@ -43,6 +57,10 @@ const schema = z
           path: ['EMAIL_PROVIDER'],
           message: 'em produção use um provedor real',
         });
+      }
+      for (const nome of CHAVES_OBRIGATORIAS_EM_PRODUCAO) {
+        if (!valores[nome])
+          ctx.addIssue({ code: 'custom', path: [nome], message: 'obrigatória em produção' });
       }
     }
   });
@@ -68,4 +86,13 @@ export function env(): Env {
 
 export function isProduction(): boolean {
   return env().NODE_ENV === 'production';
+}
+
+/**
+ * Pagamento online disponível? O provedor de teste só vale fora de produção:
+ * em produção, sem provedor real, o site não aceita compras.
+ */
+export function onlinePaymentsAvailable(): boolean {
+  const config = env();
+  return !(config.NODE_ENV === 'production' && config.PAYMENT_PROVIDER === 'mock');
 }

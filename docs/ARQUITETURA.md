@@ -826,47 +826,47 @@ alfanumérico do QR (código menor, leitura mais rápida e tolerante).
 
 | Permissão | Super admin | Admin | Gerente | Financeiro | Bilheteria | Portaria | Atendimento | Marketing | Leitura |
 |---|---|---|---|---|---|---|---|---|---|
-| `dashboard.view` | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ |
-| `dashboard.financial` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
-| `calendar.view` | ✓ | ✓ | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |
-| `calendar.manage` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `ticket_types.view` | ✓ | ✓ | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |
-| `ticket_types.manage` · `prices.manage` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `orders.view` | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
-| `orders.cancel` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `orders.export` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
-| `tickets.view` | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
-| `tickets.resend` | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |  |  |
-| `tickets.manage` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
-| `customers.view` | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ |
-| `customers.manage` | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |  |  |
-| `customers.export` | ✓ | ✓ |  |  |  |  |  |  |  |
-| `coupons.view` | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |
-| `coupons.manage` | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |
-| `courtesies.create` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `payments.view` | ✓ | ✓ | ✓ | ✓ |  |  |  |  | ✓ |
-| `payments.reconcile` | ✓ | ✓ |  | ✓ |  |  |  |  |  |
-| `refunds.request` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
-| `refunds.approve` | ✓ | ✓ |  | ✓ |  |  |  |  |  |
-| `finance.view` | ✓ | ✓ | ✓ | ✓ |  |  |  |  | ✓ |
-| `finance.export` | ✓ | ✓ |  | ✓ |  |  |  |  |  |
-| `pos.sell` | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |
-| `pos.discount` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `cash.operate` | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |
-| `cash.view_all` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
-| `checkin.scan` · `checkin.manual` | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |
-| `checkin.monitor` | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ |
-| `gates.manage` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `reports.view` | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |
-| `reports.export` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
-| `marketing.view` | ✓ | ✓ | ✓ |  |  |  |  | ✓ | ✓ |
-| `communications.view` | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  |
-| `communications.send` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
-| `users.view` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `users.manage` · `roles.manage` | ✓ | ✓ |  |  |  |  |  |  |  |
-| `settings.view` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
-| `settings.manage` · `integrations.manage` | ✓ | ✓ |  |  |  |  |  |  |  |
-| `audit.view` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
+| `dashboard.view` | Sim | Sim | Sim | Sim | Sim |  | Sim | Sim | Sim |
+| `dashboard.financial` | Sim | Sim | Sim | Sim |  |  |  |  |  |
+| `calendar.view` | Sim | Sim | Sim |  | Sim |  | Sim | Sim | Sim |
+| `calendar.manage` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `ticket_types.view` | Sim | Sim | Sim |  | Sim |  | Sim | Sim | Sim |
+| `ticket_types.manage` · `prices.manage` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `orders.view` | Sim | Sim | Sim | Sim | Sim |  | Sim |  | Sim |
+| `orders.cancel` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `orders.export` | Sim | Sim | Sim | Sim |  |  |  |  |  |
+| `tickets.view` | Sim | Sim | Sim | Sim | Sim |  | Sim |  | Sim |
+| `tickets.resend` | Sim | Sim | Sim |  | Sim |  | Sim |  |  |
+| `tickets.manage` | Sim | Sim | Sim |  |  |  | Sim |  |  |
+| `customers.view` | Sim | Sim | Sim | Sim | Sim |  | Sim | Sim | Sim |
+| `customers.manage` | Sim | Sim | Sim |  | Sim |  | Sim |  |  |
+| `customers.export` | Sim | Sim |  |  |  |  |  |  |  |
+| `coupons.view` | Sim | Sim | Sim | Sim |  |  |  | Sim | Sim |
+| `coupons.manage` | Sim | Sim | Sim |  |  |  |  | Sim |  |
+| `courtesies.create` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `payments.view` | Sim | Sim | Sim | Sim |  |  |  |  | Sim |
+| `payments.reconcile` | Sim | Sim |  | Sim |  |  |  |  |  |
+| `refunds.request` | Sim | Sim | Sim | Sim |  |  | Sim |  |  |
+| `refunds.approve` | Sim | Sim |  | Sim |  |  |  |  |  |
+| `finance.view` | Sim | Sim | Sim | Sim |  |  |  |  | Sim |
+| `finance.export` | Sim | Sim |  | Sim |  |  |  |  |  |
+| `pos.sell` | Sim | Sim | Sim |  | Sim |  |  |  |  |
+| `pos.discount` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `cash.operate` | Sim | Sim | Sim |  | Sim |  |  |  |  |
+| `cash.view_all` | Sim | Sim | Sim | Sim |  |  |  |  |  |
+| `checkin.scan` · `checkin.manual` | Sim | Sim | Sim |  |  | Sim |  |  |  |
+| `checkin.monitor` | Sim | Sim | Sim |  |  |  |  |  | Sim |
+| `gates.manage` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `reports.view` | Sim | Sim | Sim | Sim |  |  |  | Sim | Sim |
+| `reports.export` | Sim | Sim | Sim | Sim |  |  |  |  |  |
+| `marketing.view` | Sim | Sim | Sim |  |  |  |  | Sim | Sim |
+| `communications.view` | Sim | Sim | Sim |  |  |  | Sim | Sim |  |
+| `communications.send` | Sim | Sim | Sim |  |  |  | Sim |  |  |
+| `users.view` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `users.manage` · `roles.manage` | Sim | Sim |  |  |  |  |  |  |  |
+| `settings.view` | Sim | Sim | Sim |  |  |  |  |  |  |
+| `settings.manage` · `integrations.manage` | Sim | Sim |  |  |  |  |  |  |  |
+| `audit.view` | Sim | Sim | Sim | Sim |  |  |  |  |  |
 
 ### Rotas sensíveis
 

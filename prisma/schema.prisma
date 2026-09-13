@@ -36,10 +36,20 @@ model Park {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  userRoles UserRole[]
-  sessions  Session[]
-  settings  SystemSetting[]
-  auditLogs AuditLog[]
+  userRoles      UserRole[]
+  sessions       Session[]
+  settings       SystemSetting[]
+  auditLogs      AuditLog[]
+  parkDays       ParkDay[]
+  ticketTypes    TicketType[]
+  customers      Customer[]
+  carts          Cart[]
+  capacityHolds  CapacityHold[]
+  orderSequences OrderSequence[]
+  orders         Order[]
+  tickets        Ticket[]
+  payments       Payment[]
+  coupons        Coupon[]
 
   @@map("parks")
 }
@@ -79,6 +89,13 @@ model User {
   passwordResetTokens PasswordResetToken[]
   auditLogs           AuditLog[]
   updatedSettings     SystemSetting[]
+  soldOrders          Order[]              @relation("OrderSoldBy")
+  authorizedOrders    Order[]              @relation("OrderAuthorizedBy")
+  cancelledOrders     Order[]              @relation("OrderCancelledBy")
+  checkedInTickets    Ticket[]             @relation("TicketCheckedInBy")
+  ticketEvents        TicketEvent[]
+  createdPayments     Payment[]
+  createdCoupons      Coupon[]
 
   @@index([status])
   @@map("users")
@@ -259,4 +276,726 @@ model AuditLog {
   @@index([actorUserId, createdAt(sort: Desc)])
   @@index([action, createdAt(sort: Desc)])
   @@map("audit_logs")
+}
+
+// ─── Calendário, ingressos e preço ──────────────────────────────────────────
+
+enum ParkDayStatus {
+  OPEN
+  CLOSED
+
+  @@map("park_day_status")
+}
+
+/// Classificação do dia para preço. Dia útil e fim de semana saem do calendário;
+/// feriado, evento e data especial são marcados à mão.
+enum DayKind {
+  WEEKDAY
+  WEEKEND
+  HOLIDAY
+  EVENT
+  SPECIAL
+
+  @@map("day_kind")
+}
+
+model ParkDay {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  parkId    String        @map("park_id") @db.Uuid
+  date      DateTime      @db.Date
+  status    ParkDayStatus @default(OPEN)
+  /// Horário local "HH:MM".
+  opensAt   String?       @map("opens_at") @db.VarChar(5)
+  closesAt  String?       @map("closes_at") @db.VarChar(5)
+  /// Pessoas por dia (lotação).
+  capacity  Int
+  /// Tipo marcado à mão (feriado, evento, data especial). Vazio: pelo dia da semana.
+  dayKind   DayKind?      @map("day_kind")
+  label     String?       @db.VarChar(80)
+  notes     String?       @db.VarChar(500)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park    Park           @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  carts   Cart[]
+  holds   CapacityHold[]
+  orders  Order[]
+  tickets Ticket[]
+
+  @@unique([parkId, date])
+  @@map("park_days")
+}
+
+enum TicketCategory {
+  ADULT
+  CHILD
+  HALF
+  SENIOR
+  PROMO
+  VIP
+  COURTESY
+  GROUP
+  EXCURSION
+  FAMILY
+  SPECIAL
+
+  @@map("ticket_category")
+}
+
+/// Dados pedidos para cada pessoa que usa o ingresso.
+enum HolderData {
+  NONE
+  NAME
+  NAME_BIRTHDATE
+  NAME_CPF
+  NAME_CPF_BIRTHDATE
+
+  @@map("holder_data")
+}
+
+enum SalesChannel {
+  ONLINE
+  POS
+
+  @@map("sales_channel")
+}
+
+model TicketType {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  parkId               String         @map("park_id") @db.Uuid
+  slug                 String         @db.VarChar(60)
+  name                 String         @db.VarChar(60)
+  description          String?        @db.VarChar(300)
+  category             TicketCategory
+  /// Preço quando nenhuma regra de preço se aplica.
+  basePriceCents       Int            @map("base_price_cents")
+  minAge               Int?           @map("min_age")
+  maxAge               Int?           @map("max_age")
+  holderData           HolderData     @default(NAME) @map("holder_data")
+  requiresDocument     Boolean        @default(false) @map("requires_document")
+  documentHint         String?        @map("document_hint") @db.VarChar(120)
+  occupiesCapacity     Boolean        @default(true) @map("occupies_capacity")
+  /// Quantos ingressos (pessoas) cada unidade vendida gera. Ex.: combo família = 4.
+  peoplePerTicket      Int            @default(1) @map("people_per_ticket")
+  /// Unidades vendáveis por dia deste tipo. Vazio: limitado só pela lotação.
+  dailyQuota           Int?           @map("daily_quota")
+  minPerOrder          Int?           @map("min_per_order")
+  maxPerOrder          Int?           @map("max_per_order")
+  maxPerCustomerPerDay Int?           @map("max_per_customer_per_day")
+  channels             SalesChannel[] @default([ONLINE, POS])
+  availableFrom        DateTime?      @map("available_from") @db.Date
+  availableUntil       DateTime?      @map("available_until") @db.Date
+  rulesText            String?        @map("rules_text") @db.VarChar(1000)
+  sortOrder            Int            @default(0) @map("sort_order")
+  isActive             Boolean        @default(true) @map("is_active")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park       Park               @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  prices     TicketPrice[]
+  cartItems  CartItem[]
+  holdItems  CapacityHoldItem[]
+  orderItems OrderItem[]
+  tickets    Ticket[]
+  coupons    CouponTicketType[]
+
+  @@unique([parkId, slug])
+  @@index([parkId, isActive, sortOrder])
+  @@map("ticket_types")
+}
+
+/// Regra de preço: vence a de maior prioridade entre as que se aplicam à data.
+model TicketPrice {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ticketTypeId   String    @map("ticket_type_id") @db.Uuid
+  name           String    @db.VarChar(60)
+  priceCents     Int       @map("price_cents")
+  /// Preço "de" riscado na vitrine, quando há promoção.
+  compareAtCents Int?      @map("compare_at_cents")
+  /// Vazio: vale para qualquer tipo de dia.
+  dayKinds       DayKind[] @default([]) @map("day_kinds")
+  visitFrom      DateTime? @map("visit_from") @db.Date
+  visitUntil     DateTime? @map("visit_until") @db.Date
+  saleStartsAt   DateTime? @map("sale_starts_at") @db.Timestamptz(3)
+  saleEndsAt     DateTime? @map("sale_ends_at") @db.Timestamptz(3)
+  /// Lote: quantos ingressos podem ser vendidos com este preço.
+  lotQuantity    Int?      @map("lot_quantity")
+  priority       Int       @default(0)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  ticketType TicketType  @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([ticketTypeId, isActive])
+  @@map("ticket_prices")
+}
+
+// ─── Clientes ───────────────────────────────────────────────────────────────
+
+model Customer {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  parkId         String    @map("park_id") @db.Uuid
+  name           String    @db.VarChar(120)
+  email          String    @db.VarChar(254)
+  phone          String?   @db.VarChar(13)
+  birthDate      DateTime? @map("birth_date") @db.Date
+  /// HMAC do CPF (busca exata). O número completo não é gravado.
+  cpfHash        String?   @map("cpf_hash") @db.Char(64)
+  cpfMasked      String?   @map("cpf_masked") @db.VarChar(14)
+  marketingOptIn Boolean   @default(false) @map("marketing_opt_in")
+  notes          String?   @db.VarChar(2000)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park         Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  orders       Order[]
+  tickets      Ticket[]
+  couponUsages CouponUsage[]
+
+  @@unique([parkId, cpfHash])
+  @@index([parkId, email])
+  @@index([parkId, phone])
+  @@index([parkId, createdAt(sort: Desc)])
+  @@map("customers")
+}
+
+// ─── Carrinho e reserva de vagas ────────────────────────────────────────────
+
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  EXPIRED
+  ABANDONED
+
+  @@map("cart_status")
+}
+
+model Cart {
+  id        String     @id @default(uuid(7)) @db.Uuid
+  parkId    String     @map("park_id") @db.Uuid
+  parkDayId String     @map("park_day_id") @db.Uuid
+  visitDate DateTime   @map("visit_date") @db.Date
+  /// SHA-256 do token do cookie do carrinho.
+  tokenHash String     @unique @map("token_hash") @db.Char(64)
+  status    CartStatus @default(ACTIVE)
+  expiresAt DateTime   @map("expires_at") @db.Timestamptz(3)
+  orderId   String?    @unique @map("order_id") @db.Uuid
+  ip        String?    @db.VarChar(45)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park    Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  parkDay ParkDay       @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  order   Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  items   CartItem[]
+  hold    CapacityHold?
+
+  @@index([parkId, status, expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id           String @id @default(uuid(7)) @db.Uuid
+  cartId       String @map("cart_id") @db.Uuid
+  ticketTypeId String @map("ticket_type_id") @db.Uuid
+  quantity     Int
+
+  cart       Cart       @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, ticketTypeId])
+  @@index([ticketTypeId])
+  @@map("cart_items")
+}
+
+enum HoldStatus {
+  ACTIVE
+  CONVERTED
+  RELEASED
+  EXPIRED
+
+  @@map("hold_status")
+}
+
+/// Vagas seguradas por um carrinho ou por um pedido aguardando pagamento.
+/// Reserva vencida deixa de contar sozinha, mesmo antes da limpeza.
+model CapacityHold {
+  id        String     @id @default(uuid(7)) @db.Uuid
+  parkId    String     @map("park_id") @db.Uuid
+  parkDayId String     @map("park_day_id") @db.Uuid
+  cartId    String?    @unique @map("cart_id") @db.Uuid
+  orderId   String?    @unique @map("order_id") @db.Uuid
+  people    Int
+  status    HoldStatus @default(ACTIVE)
+  expiresAt DateTime   @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park    Park               @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  parkDay ParkDay            @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  cart    Cart?              @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  order   Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  items   CapacityHoldItem[]
+
+  @@index([parkDayId, status, expiresAt])
+  @@map("capacity_holds")
+}
+
+model CapacityHoldItem {
+  holdId       String @map("hold_id") @db.Uuid
+  ticketTypeId String @map("ticket_type_id") @db.Uuid
+  /// Unidades do tipo (não pessoas).
+  quantity     Int
+
+  hold       CapacityHold @relation(fields: [holdId], references: [id], onDelete: Cascade)
+  ticketType TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  @@id([holdId, ticketTypeId])
+  @@index([ticketTypeId])
+  @@map("capacity_hold_items")
+}
+
+// ─── Pedidos e ingressos ────────────────────────────────────────────────────
+
+model OrderSequence {
+  parkId    String @map("park_id") @db.Uuid
+  year      Int
+  lastValue Int    @default(0) @map("last_value")
+
+  park Park @relation(fields: [parkId], references: [id], onDelete: Restrict)
+
+  @@id([parkId, year])
+  @@map("order_sequences")
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+
+  @@map("order_status")
+}
+
+enum FinancialStatus {
+  UNPAID
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  NOT_APPLICABLE
+
+  @@map("financial_status")
+}
+
+enum OrderChannel {
+  ONLINE
+  POS
+  COURTESY
+  ADMIN
+
+  @@map("order_channel")
+}
+
+model Order {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  parkId          String          @map("park_id") @db.Uuid
+  /// Número amigável, ex.: CP-2026-000128.
+  code            String          @db.VarChar(24)
+  customerId      String?         @map("customer_id") @db.Uuid
+  /// Contato usado nesta compra (o cadastro do cliente não é sobrescrito por compra anônima).
+  buyerName       String          @map("buyer_name") @db.VarChar(120)
+  buyerEmail      String          @map("buyer_email") @db.VarChar(254)
+  buyerPhone      String?         @map("buyer_phone") @db.VarChar(13)
+  buyerCpfMasked  String?         @map("buyer_cpf_masked") @db.VarChar(14)
+  parkDayId       String          @map("park_day_id") @db.Uuid
+  visitDate       DateTime        @map("visit_date") @db.Date
+  status          OrderStatus     @default(PENDING_PAYMENT)
+  financialStatus FinancialStatus @default(UNPAID) @map("financial_status")
+  channel         OrderChannel    @default(ONLINE)
+  subtotalCents   Int             @map("subtotal_cents")
+  discountCents   Int             @default(0) @map("discount_cents")
+  feeCents        Int             @default(0) @map("fee_cents")
+  totalCents      Int             @map("total_cents")
+  couponId        String?         @map("coupon_id") @db.Uuid
+  soldById        String?         @map("sold_by_id") @db.Uuid
+  authorizedById  String?         @map("authorized_by_id") @db.Uuid
+  courtesyReason  String?         @map("courtesy_reason") @db.VarChar(300)
+  /// Muda quando o link do pedido precisa ser invalidado.
+  accessVersion   Int             @default(1) @map("access_version")
+  expiresAt       DateTime?       @map("expires_at") @db.Timestamptz(3)
+  confirmedAt     DateTime?       @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt     DateTime?       @map("cancelled_at") @db.Timestamptz(3)
+  cancelledById   String?         @map("cancelled_by_id") @db.Uuid
+  cancelReason    String?         @map("cancel_reason") @db.VarChar(300)
+  idempotencyKey  String?         @unique @map("idempotency_key") @db.VarChar(80)
+  utmSource       String?         @map("utm_source") @db.VarChar(100)
+  utmMedium       String?         @map("utm_medium") @db.VarChar(100)
+  utmCampaign     String?         @map("utm_campaign") @db.VarChar(100)
+  utmContent      String?         @map("utm_content") @db.VarChar(100)
+  utmTerm         String?         @map("utm_term") @db.VarChar(100)
+  referrer        String?         @db.VarChar(300)
+  createdIp       String?         @map("created_ip") @db.VarChar(45)
+  userAgent       String?         @map("user_agent") @db.VarChar(400)
+  notes           String?         @db.VarChar(1000)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park         Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  parkDay      ParkDay       @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  coupon       Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  soldBy       User?         @relation("OrderSoldBy", fields: [soldById], references: [id], onDelete: SetNull)
+  authorizedBy User?         @relation("OrderAuthorizedBy", fields: [authorizedById], references: [id], onDelete: SetNull)
+  cancelledBy  User?         @relation("OrderCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+  tickets      Ticket[]
+  payments     Payment[]
+  hold         CapacityHold?
+  cart         Cart?
+  couponUsage  CouponUsage?
+
+  @@unique([parkId, code])
+  @@index([parkId, createdAt(sort: Desc)])
+  @@index([parkId, status, expiresAt])
+  @@index([parkId, visitDate])
+  @@index([parkId, confirmedAt])
+  @@index([parkId, buyerEmail])
+  @@index([customerId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  ticketTypeId   String   @map("ticket_type_id") @db.Uuid
+  ticketPriceId  String?  @map("ticket_price_id") @db.Uuid
+  /// Retrato do momento da compra.
+  ticketTypeName String   @map("ticket_type_name") @db.VarChar(60)
+  priceLabel     String?  @map("price_label") @db.VarChar(60)
+  quantity       Int
+  unitPriceCents Int      @map("unit_price_cents")
+  discountCents  Int      @default(0) @map("discount_cents")
+  totalCents     Int      @map("total_cents")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketType  TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  ticketPrice TicketPrice? @relation(fields: [ticketPriceId], references: [id], onDelete: SetNull)
+  tickets     Ticket[]
+
+  @@index([orderId])
+  @@index([ticketTypeId])
+  @@index([ticketPriceId])
+  @@map("order_items")
+}
+
+enum TicketStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  CHECKED_IN
+  CANCELLED
+  REFUNDED
+  EXPIRED
+
+  @@map("ticket_status")
+}
+
+model Ticket {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  parkId           String       @map("park_id") @db.Uuid
+  orderId          String       @map("order_id") @db.Uuid
+  orderItemId      String       @map("order_item_id") @db.Uuid
+  ticketTypeId     String       @map("ticket_type_id") @db.Uuid
+  customerId       String?      @map("customer_id") @db.Uuid
+  parkDayId        String       @map("park_day_id") @db.Uuid
+  visitDate        DateTime     @map("visit_date") @db.Date
+  /// Código público aleatório (Crockford Base32), impresso embaixo do QR.
+  code             String       @db.VarChar(12)
+  qrVersion        Int          @default(1) @map("qr_version")
+  status           TicketStatus @default(PENDING_PAYMENT)
+  holderName       String?      @map("holder_name") @db.VarChar(120)
+  holderBirthDate  DateTime?    @map("holder_birth_date") @db.Date
+  holderCpfMasked  String?      @map("holder_cpf_masked") @db.VarChar(14)
+  holderCpfHash    String?      @map("holder_cpf_hash") @db.Char(64)
+  isCourtesy       Boolean      @default(false) @map("is_courtesy")
+  occupiesCapacity Boolean      @default(true) @map("occupies_capacity")
+  priceCents       Int          @map("price_cents")
+  activatedAt      DateTime?    @map("activated_at") @db.Timestamptz(3)
+  checkedInAt      DateTime?    @map("checked_in_at") @db.Timestamptz(3)
+  checkedInById    String?      @map("checked_in_by_id") @db.Uuid
+  cancelledAt      DateTime?    @map("cancelled_at") @db.Timestamptz(3)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park        Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItem   OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  ticketType  TicketType    @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  parkDay     ParkDay       @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  checkedInBy User?         @relation("TicketCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  events      TicketEvent[]
+
+  @@unique([parkId, code])
+  @@index([orderId])
+  @@index([parkDayId, status])
+  @@index([parkId, visitDate, status])
+  @@index([ticketTypeId])
+  @@index([holderCpfHash])
+  @@map("tickets")
+}
+
+enum TicketEventType {
+  CREATED
+  ACTIVATED
+  CHECKED_IN
+  CANCELLED
+  REFUNDED
+  EXPIRED
+  REISSUED
+  RESENT
+  HOLDER_CHANGED
+
+  @@map("ticket_event_type")
+}
+
+model TicketEvent {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  ticketId    String          @map("ticket_id") @db.Uuid
+  type        TicketEventType
+  actorUserId String?         @map("actor_user_id") @db.Uuid
+  data        Json?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  ticket    Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorUser User?  @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_events")
+}
+
+// ─── Pagamentos ─────────────────────────────────────────────────────────────
+
+enum PaymentProvider {
+  MOCK
+  ASAAS
+
+  @@map("payment_provider")
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH
+  CARD_TERMINAL
+  COURTESY
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  AWAITING
+  PROCESSING
+  APPROVED
+  DECLINED
+  EXPIRED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CHARGEBACK
+
+  @@map("payment_status")
+}
+
+model Payment {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  parkId            String          @map("park_id") @db.Uuid
+  orderId           String          @map("order_id") @db.Uuid
+  provider          PaymentProvider
+  method            PaymentMethod
+  status            PaymentStatus   @default(AWAITING)
+  amountCents       Int             @map("amount_cents")
+  feeCents          Int?            @map("fee_cents")
+  netCents          Int?            @map("net_cents")
+  refundedCents     Int             @default(0) @map("refunded_cents")
+  providerPaymentId String?         @map("provider_payment_id") @db.VarChar(100)
+  /// PIX copia-e-cola.
+  pixPayload        String?         @map("pix_payload") @db.VarChar(1000)
+  checkoutUrl       String?         @map("checkout_url") @db.VarChar(500)
+  expiresAt         DateTime?       @map("expires_at") @db.Timestamptz(3)
+  approvedAt        DateTime?       @map("approved_at") @db.Timestamptz(3)
+  failureCode       String?         @map("failure_code") @db.VarChar(60)
+  failureMessage    String?         @map("failure_message") @db.VarChar(300)
+  idempotencyKey    String          @unique @map("idempotency_key") @db.VarChar(80)
+  createdById       String?         @map("created_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park         Park                 @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  order        Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdBy    User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  transactions PaymentTransaction[]
+  webhooks     WebhookEvent[]
+
+  @@unique([provider, providerPaymentId])
+  @@index([orderId])
+  @@index([parkId, status, createdAt(sort: Desc)])
+  @@map("payments")
+}
+
+enum PaymentTransactionKind {
+  CREATED
+  STATUS_CHANGED
+  WEBHOOK
+  RECONCILED
+  ERROR
+
+  @@map("payment_transaction_kind")
+}
+
+model PaymentTransaction {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  paymentId         String                 @map("payment_id") @db.Uuid
+  kind              PaymentTransactionKind
+  fromStatus        PaymentStatus?         @map("from_status")
+  toStatus          PaymentStatus?         @map("to_status")
+  amountCents       Int?                   @map("amount_cents")
+  providerReference String?                @map("provider_reference") @db.VarChar(120)
+  data              Json?
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, createdAt])
+  @@map("payment_transactions")
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+
+  @@map("webhook_status")
+}
+
+model WebhookEvent {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  provider    PaymentProvider
+  externalId  String          @map("external_id") @db.VarChar(120)
+  eventType   String          @map("event_type") @db.VarChar(80)
+  verified    Boolean
+  status      WebhookStatus   @default(RECEIVED)
+  payload     Json
+  attempts    Int             @default(0)
+  lastError   String?         @map("last_error") @db.VarChar(500)
+  paymentId   String?         @map("payment_id") @db.Uuid
+  receivedAt  DateTime        @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime?       @map("processed_at") @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalId])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
+
+/// Estado das cobranças do provedor de teste. Só existe para desenvolvimento e testes.
+model DevMockCharge {
+  id          String        @id @db.VarChar(60)
+  amountCents Int           @map("amount_cents")
+  status      PaymentStatus @default(AWAITING)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("dev_mock_charges")
+}
+
+// ─── Cupons ─────────────────────────────────────────────────────────────────
+
+enum CouponDiscountType {
+  PERCENT
+  FIXED
+
+  @@map("coupon_discount_type")
+}
+
+model Coupon {
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  parkId             String             @map("park_id") @db.Uuid
+  /// Sempre em maiúsculas (CHECK na migration).
+  code               String             @db.VarChar(30)
+  description        String?            @db.VarChar(200)
+  discountType       CouponDiscountType @map("discount_type")
+  /// Pontos-base: 1000 = 10%.
+  percentBps         Int?               @map("percent_bps")
+  amountCents        Int?               @map("amount_cents")
+  maxDiscountCents   Int?               @map("max_discount_cents")
+  minOrderCents      Int?               @map("min_order_cents")
+  startsAt           DateTime?          @map("starts_at") @db.Timestamptz(3)
+  endsAt             DateTime?          @map("ends_at") @db.Timestamptz(3)
+  visitFrom          DateTime?          @map("visit_from") @db.Date
+  visitUntil         DateTime?          @map("visit_until") @db.Date
+  /// 0 = domingo … 6 = sábado. Vazio: qualquer dia.
+  weekdays           Int[]              @default([])
+  maxUses            Int?               @map("max_uses")
+  maxUsesPerCustomer Int?               @map("max_uses_per_customer")
+  firstPurchaseOnly  Boolean            @default(false) @map("first_purchase_only")
+  channels           SalesChannel[]     @default([ONLINE, POS])
+  isActive           Boolean            @default(true) @map("is_active")
+  createdById        String?            @map("created_by_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park        Park               @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  ticketTypes CouponTicketType[]
+  usages      CouponUsage[]
+  orders      Order[]
+
+  @@unique([parkId, code])
+  @@map("coupons")
+}
+
+model CouponTicketType {
+  couponId     String @map("coupon_id") @db.Uuid
+  ticketTypeId String @map("ticket_type_id") @db.Uuid
+
+  coupon     Coupon     @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, ticketTypeId])
+  @@index([ticketTypeId])
+  @@map("coupon_ticket_types")
+}
+
+enum CouponUsageStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+
+  @@map("coupon_usage_status")
+}
+
+model CouponUsage {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  couponId      String            @map("coupon_id") @db.Uuid
+  orderId       String            @unique @map("order_id") @db.Uuid
+  customerId    String?           @map("customer_id") @db.Uuid
+  cpfHash       String?           @map("cpf_hash") @db.Char(64)
+  discountCents Int               @map("discount_cents")
+  status        CouponUsageStatus @default(RESERVED)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  coupon   Coupon    @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([couponId, status])
+  @@index([cpfHash])
+  @@map("coupon_usages")
 }

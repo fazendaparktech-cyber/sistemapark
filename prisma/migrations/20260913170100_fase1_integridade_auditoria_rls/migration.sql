@@ -57,7 +57,15 @@ CREATE TRIGGER "audit_logs_no_truncate"
 -- das tabelas, que não é afetado. Toda migration que cria tabela repete isto —
 -- um teste de integração confere.
 
-ALTER TABLE "_prisma_migrations" ENABLE ROW LEVEL SECURITY;
+-- A tabela de controle do Prisma não existe no banco auxiliar usado para gerar migrations.
+DO $$
+BEGIN
+  IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE "_prisma_migrations" ENABLE ROW LEVEL SECURITY';
+  END IF;
+END;
+$$;
+
 ALTER TABLE "parks" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "roles" ENABLE ROW LEVEL SECURITY;
