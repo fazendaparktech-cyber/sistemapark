@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
 
 # next.js
 /.next/
@@ -30,8 +33,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — o .env.example é versionado (modelo sem valores reais)
 .env*
+!.env.example
+
+# prisma client gerado a partir do schema
+/src/generated/
+
+# postgres local de desenvolvimento e testes
+/.data/
 
 # vercel
 .vercel

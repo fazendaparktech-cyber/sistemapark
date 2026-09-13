@@ -1,0 +1,262 @@
+// Sistema Conquista Park — schema do banco.
+//
+// Convenções (docs/ARQUITETURA.md, seção 5):
+// - tabelas e colunas em snake_case; chave primária uuid v7;
+// - dinheiro em centavos (Int); data da visita em Date; instantes em Timestamptz;
+// - toda mudança estrutural vira migration revisada; nunca `db push` em produção;
+// - regras que o Prisma não expressa (CHECK, trigger, RLS) ficam no SQL da migration.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Parque ─────────────────────────────────────────────────────────────────
+
+model Park {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  slug            String   @unique @db.VarChar(60)
+  name            String   @db.VarChar(120)
+  legalName       String?  @map("legal_name") @db.VarChar(160)
+  cnpj            String?  @db.VarChar(14)
+  timezone        String   @default("America/Bahia") @db.VarChar(60)
+  orderCodePrefix String   @default("CP") @map("order_code_prefix") @db.VarChar(6)
+  email           String?  @db.VarChar(254)
+  phone           String?  @db.VarChar(13)
+  whatsapp        String?  @db.VarChar(13)
+  addressLine     String?  @map("address_line") @db.VarChar(200)
+  city            String?  @db.VarChar(80)
+  state           String?  @db.Char(2)
+  postalCode      String?  @map("postal_code") @db.VarChar(8)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  userRoles UserRole[]
+  sessions  Session[]
+  settings  SystemSetting[]
+  auditLogs AuditLog[]
+
+  @@map("parks")
+}
+
+// ─── Equipe e acesso ────────────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+
+  @@map("user_status")
+}
+
+model User {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  name               String     @db.VarChar(120)
+  /// Sempre minúsculo e sem espaços nas pontas (CHECK na migration).
+  email              String     @unique @db.VarChar(254)
+  phone              String?    @db.VarChar(13)
+  passwordHash       String     @map("password_hash") @db.VarChar(255)
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime?  @map("password_changed_at") @db.Timestamptz(3)
+  lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  lastLoginIp        String?    @map("last_login_ip") @db.VarChar(45)
+  createdById        String?    @map("created_by_id") @db.Uuid
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy           User?                @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers        User[]               @relation("UserCreatedBy")
+  roles               UserRole[]           @relation("UserRoleUser")
+  grantedRoles        UserRole[]           @relation("UserRoleGrantedBy")
+  grantedPermissions  RolePermission[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs           AuditLog[]
+  updatedSettings     SystemSetting[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// SUPER_ADMIN, ADMIN, MANAGER… — ver src/lib/access.ts.
+  key         String   @unique @db.VarChar(40)
+  name        String   @db.VarChar(60)
+  description String?  @db.VarChar(300)
+  isSystem    Boolean  @default(false) @map("is_system")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permissions RolePermission[]
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// modulo.acao, ex.: refunds.approve — ver src/lib/access.ts.
+  key         String   @unique @db.VarChar(60)
+  module      String   @db.VarChar(40)
+  description String   @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  grantedById  String?  @map("granted_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedBy  User?      @relation(fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  parkId      String   @map("park_id") @db.Uuid
+  roleId      String   @map("role_id") @db.Uuid
+  grantedById String?  @map("granted_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User  @relation("UserRoleUser", fields: [userId], references: [id], onDelete: Cascade)
+  park      Park  @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  role      Role  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  grantedBy User? @relation("UserRoleGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, parkId, roleId])
+  @@index([parkId, roleId])
+  @@map("user_roles")
+}
+
+enum SessionRevokeReason {
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  USER_DISABLED
+  ACCESS_CHANGED
+  ADMIN_REVOKED
+
+  @@map("session_revoke_reason")
+}
+
+model Session {
+  id            String               @id @default(uuid(7)) @db.Uuid
+  userId        String               @map("user_id") @db.Uuid
+  parkId        String               @map("park_id") @db.Uuid
+  /// SHA-256 do token do cookie. O token em si nunca é gravado.
+  tokenHash     String               @unique @map("token_hash") @db.Char(64)
+  ip            String?              @db.VarChar(45)
+  userAgent     String?              @map("user_agent") @db.VarChar(400)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt    DateTime             @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt     DateTime             @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime?            @map("revoked_at") @db.Timestamptz(3)
+  revokedReason SessionRevokeReason? @map("revoked_reason")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  park Park @relation(fields: [parkId], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  /// SHA-256 do token enviado por e-mail.
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  requestedIp String?   @map("requested_ip") @db.VarChar(45)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+/// Janela fixa de tentativas por chave (ex.: login por e-mail + IP).
+model RateLimit {
+  key             String   @id @db.VarChar(200)
+  count           Int
+  windowStartedAt DateTime @map("window_started_at") @db.Timestamptz(3)
+
+  @@index([windowStartedAt])
+  @@map("rate_limits")
+}
+
+// ─── Configuração e trilha ──────────────────────────────────────────────────
+
+model SystemSetting {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  parkId      String   @map("park_id") @db.Uuid
+  key         String   @db.VarChar(80)
+  /// Validado por um schema Zod por chave antes de gravar.
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park      Park  @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([parkId, key])
+  @@map("system_settings")
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  WEBHOOK
+  CUSTOMER
+
+  @@map("audit_actor_type")
+}
+
+/// Somente-inclusão: um trigger bloqueia UPDATE, DELETE e TRUNCATE.
+model AuditLog {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  parkId      String?        @map("park_id") @db.Uuid
+  actorType   AuditActorType @map("actor_type")
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  action      String         @db.VarChar(80)
+  entityType  String?        @map("entity_type") @db.VarChar(60)
+  entityId    String?        @map("entity_id") @db.VarChar(100)
+  before      Json?
+  after       Json?
+  data        Json?
+  ip          String?        @db.VarChar(45)
+  userAgent   String?        @map("user_agent") @db.VarChar(400)
+  requestId   String?        @map("request_id") @db.VarChar(64)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  park      Park? @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([parkId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
