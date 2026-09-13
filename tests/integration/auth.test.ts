@@ -117,6 +117,34 @@ describe('login', () => {
     );
   });
 
+  it('logins certos não contam para o limite do IP (equipe saindo pelo mesmo Wi-Fi)', async () => {
+    const parque = await createPark();
+    const pessoa = await createUser({ parkId: parque.id, roles: ['BOX_OFFICE'] });
+    const redeDoParque = meta();
+    for (let i = 0; i < LOGIN_LIMITS.failuresPerIp.limit + 3; i++) {
+      const entrada = await login({ email: pessoa.email, password: DEFAULT_PASSWORD }, redeDoParque);
+      expect(entrada.token).toBeTruthy();
+    }
+  });
+
+  it('muitas falhas vindas do mesmo IP bloqueiam qualquer e-mail naquele IP', async () => {
+    const parque = await createPark();
+    const pessoa = await createUser({ parkId: parque.id, roles: ['GATE'] });
+    const atacante = meta();
+    for (let i = 0; i < LOGIN_LIMITS.failuresPerIp.limit; i++) {
+      await expectAppError(
+        login({ email: `tentativa-${i}@teste.dev`, password: 'errada-123' }, atacante),
+        'INVALID_CREDENTIALS',
+      );
+    }
+    await expectAppError(
+      login({ email: pessoa.email, password: DEFAULT_PASSWORD }, atacante),
+      'RATE_LIMITED',
+    );
+    // A pessoa continua entrando de outro lugar.
+    expect((await login({ email: pessoa.email, password: DEFAULT_PASSWORD }, meta())).token).toBeTruthy();
+  });
+
   it('conta desativada não entra, e o motivo só aparece com a senha certa', async () => {
     const parque = await createPark();
     const pessoa = await createUser({ parkId: parque.id, roles: ['GATE'], status: 'DISABLED' });

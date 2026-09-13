@@ -76,6 +76,8 @@ export function proxy(req: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const politica = politicaDeConteudo(nonce, process.env.NODE_ENV === 'development');
   cabecalhos.set('x-nonce', nonce);
+  // O painel usa o caminho para, sem sessão, voltar à mesma página depois do login.
+  cabecalhos.set('x-pathname', pathname);
   cabecalhos.set('Content-Security-Policy', politica);
 
   const resposta = NextResponse.next({ request: { headers: cabecalhos } });

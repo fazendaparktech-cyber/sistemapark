@@ -28,6 +28,7 @@ export function rateLimitKey(scope: string, ...parts: readonly (string | null | 
   return `${scope}:${sha256Hex(parts.map((parte) => parte ?? '-').join('|')).slice(0, 40)}`;
 }
 
+/** Soma uma tentativa e devolve a contagem da janela. */
 export async function consumeRateLimit(rule: RateLimitRule, db: DbClient = prisma): Promise<RateLimitResult> {
   const linhas = await db.$queryRaw<{ count: number; retry_after: number }[]>`
     INSERT INTO rate_limits AS rl (key, count, window_started_at)
@@ -52,6 +53,29 @@ export async function consumeRateLimit(rule: RateLimitRule, db: DbClient = prism
     count,
     remaining: Math.max(0, rule.limit - count),
     retryAfterSeconds: linha?.retry_after ?? rule.windowSeconds,
+  };
+}
+
+/**
+ * Lê a contagem da janela sem somar. `allowed` indica que ainda cabe mais uma
+ * tentativa. Usado para limites que só contam falhas.
+ */
+export async function peekRateLimit(rule: RateLimitRule, db: DbClient = prisma): Promise<RateLimitResult> {
+  const linhas = await db.$queryRaw<{ count: number; retry_after: number }[]>`
+    SELECT
+      count,
+      GREATEST(1, CEIL(EXTRACT(EPOCH FROM (window_started_at + ${rule.windowSeconds}::int * interval '1 second' - now()))))::int AS retry_after
+    FROM rate_limits
+    WHERE key = ${rule.key}
+      AND window_started_at > now() - ${rule.windowSeconds}::int * interval '1 second'`;
+
+  const linha = linhas[0];
+  const count = linha?.count ?? 0;
+  return {
+    allowed: count < rule.limit,
+    count,
+    remaining: Math.max(0, rule.limit - count),
+    retryAfterSeconds: linha?.retry_after ?? 0,
   };
 }
 

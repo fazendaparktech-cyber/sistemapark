@@ -3,7 +3,7 @@ import 'server-only';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { checkPassword, describePasswordProblems } from '@/lib/password-policy';
 
-import { recordAudit } from '../audit';
+import { recordAudit, type AuditInput } from '../audit';
 import { randomToken, sha256Hex } from '../crypto';
 import { prisma } from '../db';
 import { env } from '../env';
@@ -11,7 +11,13 @@ import { AppError, Errors } from '../errors';
 import { emailProvider } from '../integrations/email';
 import { passwordResetEmail } from '../integrations/email/templates';
 import { logger } from '../logger';
-import { clearRateLimit, consumeRateLimit, enforceRateLimit, rateLimitKey } from '../rate-limit';
+import {
+  clearRateLimit,
+  consumeRateLimit,
+  enforceRateLimit,
+  peekRateLimit,
+  rateLimitKey,
+} from '../rate-limit';
 import type { RequestMeta } from '../request';
 import type { AuthContext } from './context';
 import { hashPassword, passwordNeedsRehash, simulatePasswordCheck, verifyPassword } from './password';
@@ -24,9 +30,12 @@ import { createSession, revokeSession, revokeUserSessions, type CreatedSession }
  */
 
 export const LOGIN_LIMITS = {
-  perIp: { limit: 30, windowSeconds: 15 * 60 },
+  /** Falhas por IP. Logins certos não contam: a equipe do parque pode sair pelo mesmo IP. */
+  failuresPerIp: { limit: 30, windowSeconds: 15 * 60 },
+  /** Tentativas por e-mail + IP, certas ou erradas; zera quando o login dá certo. */
   perEmailAndIp: { limit: 5, windowSeconds: 15 * 60 },
-  perEmail: { limit: 50, windowSeconds: 60 * 60 },
+  /** Falhas por conta, vindas de qualquer IP — freia ataque distribuído contra uma conta. */
+  failuresPerEmail: { limit: 50, windowSeconds: 60 * 60 },
 } as const;
 
 export const PASSWORD_RESET_TTL_MINUTES = 30;
@@ -41,20 +50,35 @@ export async function login(
   db: PrismaClient = prisma,
 ): Promise<LoginResult> {
   const email = input.email.trim().toLowerCase();
+  const falhasPorIp = { key: rateLimitKey('login:ip', meta.ip), ...LOGIN_LIMITS.failuresPerIp };
+  const falhasPorConta = { key: rateLimitKey('login:email', email), ...LOGIN_LIMITS.failuresPerEmail };
 
-  await enforceRateLimit({ key: rateLimitKey('login:ip', meta.ip), ...LOGIN_LIMITS.perIp }, db);
+  const [porIp, porConta] = await Promise.all([
+    peekRateLimit(falhasPorIp, db),
+    peekRateLimit(falhasPorConta, db),
+  ]);
+  if (!porIp.allowed) throw Errors.rateLimited(porIp.retryAfterSeconds);
+  if (!porConta.allowed) {
+    // Um registro por janela na auditoria, para um ataque não encher a trilha.
+    const primeiraRecusa = await consumeRateLimit(
+      {
+        key: rateLimitKey('login:throttle-audit', email),
+        limit: 1,
+        windowSeconds: LOGIN_LIMITS.failuresPerEmail.windowSeconds,
+      },
+      db,
+    );
+    if (primeiraRecusa.allowed)
+      await recordAudit(db, { action: 'auth.login_throttled', data: { email }, meta });
+    throw Errors.rateLimited(porConta.retryAfterSeconds);
+  }
+
   const chaveEmailIp = rateLimitKey('login:email-ip', email, meta.ip);
   await enforceRateLimit({ key: chaveEmailIp, ...LOGIN_LIMITS.perEmailAndIp }, db);
-  const porConta = await consumeRateLimit(
-    { key: rateLimitKey('login:email', email), ...LOGIN_LIMITS.perEmail },
-    db,
-  );
-  if (!porConta.allowed) {
-    // Registra só a primeira recusa da janela, para um ataque não encher a auditoria.
-    if (porConta.count === LOGIN_LIMITS.perEmail.limit + 1) {
-      await recordAudit(db, { action: 'auth.login_throttled', data: { email }, meta });
-    }
-    throw Errors.rateLimited(porConta.retryAfterSeconds);
+
+  async function registrarFalha(registro: AuditInput): Promise<void> {
+    await Promise.all([consumeRateLimit(falhasPorIp, db), consumeRateLimit(falhasPorConta, db)]);
+    await recordAudit(db, registro);
   }
 
   const usuario = await db.user.findUnique({
@@ -71,12 +95,12 @@ export async function login(
 
   if (!usuario) {
     await simulatePasswordCheck(input.password);
-    await recordAudit(db, { action: 'auth.login_failed', data: { email, reason: 'UNKNOWN_EMAIL' }, meta });
+    await registrarFalha({ action: 'auth.login_failed', data: { email, reason: 'UNKNOWN_EMAIL' }, meta });
     throw Errors.invalidCredentials();
   }
 
   if (!(await verifyPassword(usuario.passwordHash, input.password))) {
-    await recordAudit(db, {
+    await registrarFalha({
       action: 'auth.login_failed',
       entityType: 'user',
       entityId: usuario.id,

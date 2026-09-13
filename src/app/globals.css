@@ -1,26 +1,186 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Design system do Conquista Park.
+ *
+ * Cores oficiais da marca (docs/MARCA.md do site antigo): azul da logo #4FC6DB,
+ * azul bebê #8FD4EA, roxo #583C8D, amarelo #FDB92A e verde-limão #B9D53A.
+ * As escalas giram em torno delas. Os pares de texto e fundo usados nos
+ * componentes passam no contraste WCAG AA (4,5:1 para texto comum).
+ *
+ * - pool:   azul piscina — ações principais do painel e links
+ * - grape:  roxo da logo — marca, destaques e reembolso
+ * - sun:    amarelo — chamada de ação do site (comprar)
+ * - citrus: verde-limão — cortesia e confirmações leves
+ * - ink:    neutros levemente arroxeados — texto, bordas e fundos
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-bricolage), var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-pool-50: #effafd;
+  --color-pool-100: #d9f2f9;
+  --color-pool-200: #b6e5f2;
+  --color-pool-300: #8fd4ea;
+  --color-pool-400: #4fc6db;
+  --color-pool-500: #22aac3;
+  --color-pool-600: #1789a1;
+  --color-pool-700: #146f83;
+  --color-pool-800: #155b6b;
+  --color-pool-900: #164b59;
+  --color-pool-950: #07303a;
+
+  --color-grape-50: #f6f3fb;
+  --color-grape-100: #ebe4f6;
+  --color-grape-200: #d7caec;
+  --color-grape-300: #b9a2da;
+  --color-grape-400: #9877c5;
+  --color-grape-500: #7a56ab;
+  --color-grape-600: #583c8d;
+  --color-grape-700: #4a3277;
+  --color-grape-800: #3c2961;
+  --color-grape-900: #2e2149;
+  --color-grape-950: #1b1330;
+
+  --color-sun-50: #fffaeb;
+  --color-sun-100: #fff1cc;
+  --color-sun-200: #ffe29a;
+  --color-sun-300: #fed160;
+  --color-sun-400: #fdb92a;
+  --color-sun-500: #f29b0c;
+  --color-sun-600: #cf7506;
+  --color-sun-700: #a45408;
+  --color-sun-800: #86420e;
+
+  --color-citrus-50: #f8fbea;
+  --color-citrus-100: #eff6d0;
+  --color-citrus-200: #deeca3;
+  --color-citrus-300: #cde06f;
+  --color-citrus-400: #b9d53a;
+  --color-citrus-500: #9cb826;
+  --color-citrus-600: #7b921b;
+  --color-citrus-700: #5d6f19;
+  --color-citrus-800: #4b5919;
+
+  --color-ink-50: #f7f7fa;
+  --color-ink-100: #efeef4;
+  --color-ink-200: #e2e0ea;
+  --color-ink-300: #c8c5d5;
+  --color-ink-400: #a09cb2;
+  --color-ink-500: #716c87;
+  --color-ink-600: #5a5570;
+  --color-ink-700: #433e57;
+  --color-ink-800: #2d293f;
+  --color-ink-900: #1e1a2e;
+  --color-ink-950: #120f1d;
+
+  --color-success-50: #edfcf2;
+  --color-success-100: #d3f8e0;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+
+  --color-warning-50: #fff8eb;
+  --color-warning-100: #feedc7;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+
+  --color-canvas: #f4f6f9;
+
+  --shadow-card: 0 1px 2px 0 rgb(30 26 46 / 0.04), 0 2px 12px -4px rgb(30 26 46 / 0.08);
+  --shadow-pop: 0 24px 60px -18px rgb(18 15 29 / 0.35), 0 2px 8px -2px rgb(18 15 29 / 0.12);
+
+  --animate-fade-in: fade-in 160ms ease-out both;
+  --animate-rise-in: rise-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-drift: drift 22s ease-in-out infinite alternate;
+  --animate-slide-in-left: slide-in-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes drift {
+    from {
+      transform: translate3d(-3%, -2%, 0) scale(1);
+    }
+    to {
+      transform: translate3d(3%, 2%, 0) scale(1.08);
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-pool-600);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-pool-200);
+    color: var(--color-ink-950);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Números alinhados em colunas (valores, horários, contagens). */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }

@@ -699,8 +699,10 @@ alfanumérico do QR (código menor, leitura mais rápida e tolerante).
 - Senha com argon2id (19 MiB, 2 iterações — mínimo OWASP). Mínimo de 10 caracteres, bloqueio de senhas
   comuns e de senhas que contenham o e-mail; sem regras de composição (orientação NIST).
 - Login com resposta e tempo iguais para e-mail inexistente e senha errada.
-- Limites: 5 tentativas por e-mail + IP em 15 minutos; 30 por IP em 15 minutos; excesso por conta gera
-  aviso interno. Sem bloqueio permanente de conta (evita que alguém trave o admin de propósito).
+- Limites: 5 tentativas por e-mail + IP em 15 minutos; 30 falhas por IP em 15 minutos (logins certos não contam: a
+  equipe do parque sai pelo mesmo IP); 50 falhas por conta em 1 hora
+  (bloqueio temporário, registrado na auditoria). Nenhum bloqueio é permanente — ninguém consegue trancar o
+  admin de propósito.
 - Recuperação: token de 256 bits, guardado como hash, uso único, 30 minutos; resposta sempre genérica;
   redefinir a senha encerra todas as sessões.
 - Primeiro administrador criado por comando no servidor (`npm run admin:create`), com senha forte gerada
@@ -794,11 +796,12 @@ alfanumérico do QR (código menor, leitura mais rápida e tolerante).
 
 ## 13. Estratégia de permissões
 
-- **Catálogo no código** (`src/server/access/permissions.ts`) é a fonte da verdade, sincronizado com o
+- **Catálogo no código** (`src/lib/access.ts`) é a fonte da verdade, sincronizado com o
   banco a cada deploy.
 - **Papéis** no banco com permissões padrão; a matriz é editável por quem tem `roles.manage`.
   `SUPER_ADMIN` sempre tem tudo e não é editável.
-- **Atribuição por parque** (`user_roles`); a sessão carrega o parque atual.
+- **Atribuição por parque** (`user_roles`); a sessão carrega o parque atual. Na V1 a matriz de cada papel
+  vale para todos os parques; quando houver mais de uma unidade, cada parque passa a ter a própria matriz.
 - **Verificação** carregando as permissões efetivas do banco a cada requisição: mudança vale na hora.
 - **Travas:** ninguém concede permissão que não tem; só `SUPER_ADMIN` atribui `SUPER_ADMIN`; o último
   `SUPER_ADMIN` ativo não pode ser removido nem desativado; limites de valor por configuração (desconto
