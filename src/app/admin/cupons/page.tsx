@@ -157,7 +157,7 @@ export default async function CuponsPage() {
                         <p className="truncate text-xs text-ink-500">{cupom.description}</p>
                       ) : null}
                     </TD>
-                    <TD className="text-ink-700">{cupom.summary}</TD>
+                    <TD className="whitespace-nowrap text-ink-700">{cupom.summary}</TD>
                     <TD className="whitespace-nowrap text-ink-600">{validade(cupom)}</TD>
                     <TD className="tabular whitespace-nowrap text-right">
                       {usos(cupom)}

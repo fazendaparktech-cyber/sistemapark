@@ -26,6 +26,7 @@ import { BarList } from '@/components/admin/bar-list';
 import { SalesChart } from '@/components/admin/charts/sales-chart';
 import { VisitorsChart } from '@/components/admin/charts/visitors-chart';
 import { KpiCard } from '@/components/admin/kpi-card';
+import { KpiGrid } from '@/components/admin/kpi-grid';
 import { firstAllowedHref } from '@/components/admin/nav';
 import { PeriodFilter } from '@/components/admin/period-filter';
 import { SalesLink } from '@/components/admin/sales-link';
@@ -58,7 +59,6 @@ function primeiro(valor: string | string[] | undefined): string | undefined {
 }
 
 const LINK = 'text-sm font-semibold text-pool-700 hover:text-pool-800';
-const GRADE = 'grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
 const COMPARADO = 'comparado ao período anterior';
 
 function Ocupacao({ dia }: { dia: UpcomingDay }) {
@@ -183,7 +183,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
           ) : null}
         </div>
-        <div className={GRADE}>
+        <KpiGrid>
           {hoje.revenue ? (
             <KpiCard
               label="Faturamento hoje"
@@ -266,7 +266,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             icon={UserCheck}
             tone="pool"
           />
-        </div>
+        </KpiGrid>
       </section>
 
       <section aria-labelledby="periodo" className="grid gap-4">
@@ -281,7 +281,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
           <PeriodFilter basePath="/admin" period={periodo} />
         </div>
-        <div className={GRADE}>
+        <KpiGrid>
           {kpis.revenue ? (
             <KpiCard
               label="Faturamento"
@@ -372,10 +372,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             icon={UserX}
             tone="ink"
           />
-        </div>
+        </KpiGrid>
       </section>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title={financeiro ? 'Faturamento e ingressos por dia' : 'Vendas e ingressos por dia'}
@@ -438,7 +438,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
       </div>
 
-      <div className="grid items-start gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader
             title="Visitantes por dia"
@@ -468,7 +468,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
         {financeiro ? (
           <Card>
             <CardHeader title="Formas de pagamento" description="Valor recebido, já sem reembolsos" />
@@ -555,7 +555,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ) : null}
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Ocupação dos próximos 14 dias"

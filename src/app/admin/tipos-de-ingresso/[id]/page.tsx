@@ -138,7 +138,7 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
-        <div className="grid gap-6">
+        <div className="grid min-w-0 grid-cols-1 gap-6">
           <Card>
             <CardHeader title="Preços" />
             <CardContent className="grid gap-4 pt-3">
@@ -239,7 +239,7 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
           ) : null}
         </div>
 
-        <section className="grid gap-3" aria-labelledby="regras-de-preco">
+        <section className="grid min-w-0 grid-cols-1 gap-3" aria-labelledby="regras-de-preco">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="regras-de-preco" className="font-display text-[17px] font-semibold text-ink-900">
