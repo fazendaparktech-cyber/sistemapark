@@ -663,7 +663,7 @@ export function CalendarMonth({
           {Array.from({ length: vazios }, (_, indice) => (
             <div
               key={`vazio-${indice}`}
-              className="min-h-16 border-b border-r border-ink-100 bg-ink-50/30 sm:min-h-32"
+              className="min-h-16 border-b border-r border-ink-100 bg-ink-50/30 sm:min-h-28"
             />
           ))}
           {days.map((dia) => {
@@ -688,7 +688,7 @@ export function CalendarMonth({
                 onClick={() => setSelecionado(dia)}
                 aria-label={`${formatDateLong(dia.date)}: ${situacao}. ${canManage ? 'Editar dia' : 'Ver dia'}`}
                 className={cn(
-                  'flex min-h-16 flex-col border-b border-r border-ink-100 p-1.5 text-left transition-colors hover:bg-pool-50/60 focus-visible:relative focus-visible:z-10 sm:min-h-32 sm:p-2',
+                  'flex min-h-16 flex-col border-b border-r border-ink-100 p-1.5 text-left transition-colors hover:bg-pool-50/60 focus-visible:relative focus-visible:z-10 sm:min-h-28 sm:p-2',
                   dia.status === 'CLOSED' && 'bg-ink-50/80',
                   passado && 'opacity-55',
                 )}
@@ -726,30 +726,28 @@ export function CalendarMonth({
                     {Math.round(ocupacao)}%
                   </p>
                 ) : null}
-                <div className="mt-1 hidden text-left text-[11px] leading-4 sm:block">
+                <div className="mt-1.5 hidden gap-0.5 text-[11px] leading-4 sm:grid">
                   {aberto ? (
                     <>
-                      <p className={cn('font-semibold', esgotado ? 'text-danger-700' : 'text-success-700')}>
-                        {esgotado ? 'Esgotado' : 'Aberto'}
-                        {dia.opensAt && dia.closesAt ? (
-                          <span className="font-normal text-ink-500">
-                            {' '}
-                            {dia.opensAt}-{dia.closesAt}
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="tabular text-ink-700">
-                        <span className="font-semibold">{formatNumber(dia.sold)}</span> de{' '}
-                        {formatNumber(capacidade)} vendidos
-                      </p>
-                      <p className="tabular text-ink-500">
-                        {formatNumber(dia.available ?? 0)} livres · {Math.round(ocupacao)}%
+                      {dia.opensAt && dia.closesAt ? (
+                        <p className="tabular text-ink-500">
+                          {dia.opensAt} às {dia.closesAt}
+                        </p>
+                      ) : null}
+                      <p className="tabular flex items-baseline justify-between gap-1 text-ink-600">
+                        <span>
+                          <span className="font-semibold text-ink-900">{formatNumber(dia.sold)}</span>{' '}
+                          vendidos
+                        </span>
+                        <span className={esgotado ? 'font-semibold text-danger-700' : 'text-ink-500'}>
+                          {esgotado ? 'Esgotado' : `${Math.round(ocupacao)}%`}
+                        </span>
                       </p>
                     </>
                   ) : dia.status === 'CLOSED' ? (
-                    <p className="font-semibold text-ink-400">Fechado</p>
+                    <p className="text-ink-400">Fechado</p>
                   ) : (
-                    <p className="text-ink-400">Sem configuração</p>
+                    <p className="font-medium text-warning-700">Sem configuração</p>
                   )}
                   {especial ? (
                     <p className="truncate font-semibold text-grape-700">
