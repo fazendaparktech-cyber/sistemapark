@@ -1,8 +1,9 @@
-import { CircleCheck, Info, TriangleAlert } from 'lucide-react';
+import { CircleCheck, Info, LogOut, TriangleAlert } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { NoPermission } from '@/components/admin/no-permission';
+import { LogoutButton } from '@/components/auth/logout-button';
 import { OperationsSettingsForm, ParkLogoForm } from '@/components/admin/settings/park-extra-forms';
 import { ParkProfileForm, PoliciesForm, SalesSettingsForm } from '@/components/admin/settings/settings-forms';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -34,6 +35,7 @@ const SECOES = [
   { id: 'comunicacao', label: 'Comunicação' },
   { id: 'integracoes', label: 'Integrações' },
   { id: 'politicas', label: 'Políticas' },
+  { id: 'conta', label: 'Sair da conta' },
 ];
 
 type Situacao = 'ok' | 'pendente' | 'info';
@@ -317,6 +319,19 @@ export default async function ConfiguracoesPage() {
             />
             <CardContent>
               <PoliciesForm initial={politicas} canManage={podeGerenciar} />
+            </CardContent>
+          </Card>
+
+          <Card id="conta" className="scroll-mt-24">
+            <CardHeader title="Sair da conta" description={`Conectado como ${auth.user.email}.`} />
+            <CardContent className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ink-600">
+                Encerra a sessão neste aparelho. Para entrar de novo, use o e-mail e a senha da conta.
+              </p>
+              <LogoutButton variant="secondary">
+                <LogOut className="size-4" aria-hidden />
+                Sair
+              </LogoutButton>
             </CardContent>
           </Card>
         </div>
