@@ -1,3 +1,4 @@
+import { ageOn, todayIn } from './dates';
 import { MAX_CENTS } from './money';
 import {
   cpfSchema,
@@ -241,6 +242,17 @@ export const checkoutInputSchema = z.strictObject({
     email: emailSchema,
     phone: requiredPhoneSchema,
     cpf: cpfSchema,
+    /** Data de nascimento, cidade e UF: perfil do público no painel. */
+    birthDate: dateOnlySchema.refine((data) => {
+      const idade = ageOn(data, todayIn());
+      return idade >= 12 && idade <= 110;
+    }, 'Confira a data de nascimento'),
+    city: z.string().trim().min(2, 'Informe a cidade onde mora').max(80, 'Cidade muito longa'),
+    state: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/, 'Escolha a UF'),
   }),
   /** Um por ingresso, agrupados pelo tipo, na ordem em que aparecem no formulário. */
   holders: z.array(holderInputSchema).max(200),

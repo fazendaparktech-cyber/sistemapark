@@ -9,12 +9,12 @@ import {
   type CustomerUpdateInput,
 } from '@/lib/customers';
 import {
+  type DateOnly,
   dateOnlyToDb,
   dbToDateOnly,
   formatDateBR,
   formatDateTimeBR,
   todayIn,
-  type DateOnly,
 } from '@/lib/dates';
 import { formatPhoneBR, isValidCpf, maskCpf, onlyDigits } from '@/lib/documents';
 import {
@@ -26,6 +26,7 @@ import {
   type SaleStatusKey,
   type TicketStatusKey,
 } from '@/lib/orders';
+import { AGE_BUCKETS, ageBucketOf, DDD_REGIONS, type AudienceSlice } from '@/lib/audience';
 import { effectiveTicketStatus } from '@/lib/tickets';
 
 import { recordAudit } from '../audit';
@@ -57,6 +58,9 @@ export async function upsertCustomerByCpf(
     phone: string | null;
     cpfDigits: string;
     marketingOptIn: boolean;
+    birthDate?: string | null;
+    city?: string | null;
+    state?: string | null;
   },
 ): Promise<{ id: string }> {
   const cpfHash = hashCpf(input.cpfDigits);
@@ -69,6 +73,9 @@ export async function upsertCustomerByCpf(
     const complemento = {
       ...(!existente.phone && input.phone ? { phone: input.phone } : {}),
       ...(input.marketingOptIn && !existente.marketingOptIn ? { marketingOptIn: true } : {}),
+      // Cidade e nascimento: vale o que o cliente informou na compra mais recente.
+      ...(input.city ? { city: input.city, state: input.state ?? null } : {}),
+      ...(input.birthDate ? { birthDate: dateOnlyToDb(input.birthDate) } : {}),
     };
     if (Object.keys(complemento).length > 0) {
       await tx.customer.update({ where: { id: existente.id }, data: complemento });
@@ -87,6 +94,9 @@ export async function upsertCustomerByCpf(
         cpfHash,
         cpfMasked: maskCpf(input.cpfDigits),
         marketingOptIn: input.marketingOptIn,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        birthDate: input.birthDate ? dateOnlyToDb(input.birthDate) : null,
       },
     ],
     skipDuplicates: true,
@@ -699,4 +709,110 @@ export async function exportCustomersCsv(
     meta,
   });
   return { filename: `clientes-${todayIn(auth.park.timezone)}.csv`, content };
+}
+
+// ─── Perfil do público ──────────────────────────────────────────────────────
+
+export interface AudienceProfile {
+  total: number;
+  withCity: number;
+  withBirthDate: number;
+  cities: AudienceSlice[];
+  regions: AudienceSlice[];
+  ages: AudienceSlice[];
+}
+
+const SEM_INFORMACAO = { key: 'sem-informacao', label: 'Sem informação' } as const;
+const CIDADES_NO_GRAFICO = 7;
+const PALAVRAS_MINUSCULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+
+function nomeDeCidade(cidade: string): string {
+  return cidade
+    .split(/\s+/)
+    .map((palavra, indice) =>
+      indice > 0 && PALAVRAS_MINUSCULAS.has(palavra)
+        ? palavra
+        : palavra.charAt(0).toUpperCase() + palavra.slice(1),
+    )
+    .join(' ');
+}
+
+function ordenar(fatias: AudienceSlice[]): AudienceSlice[] {
+  return fatias.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
+/** De onde vêm (cidade informada e região pelo DDD) e a faixa etária dos clientes. */
+export async function getAudienceProfile(auth: AuthContext, db: DbClient = prisma): Promise<AudienceProfile> {
+  requirePermission(auth, 'customers.view');
+  const parkId = auth.park.id;
+  const hoje = todayIn(auth.park.timezone);
+  const [cidades, ddds, idades] = await Promise.all([
+    db.$queryRaw<{ cidade: string | null; uf: string | null; total: number }[]>`
+      SELECT NULLIF(lower(regexp_replace(btrim(city), '\\s+', ' ', 'g')), '') AS cidade, upper(state) AS uf,
+        COUNT(*)::int AS total
+      FROM customers WHERE park_id = ${parkId}::uuid GROUP BY 1, 2`,
+    db.$queryRaw<{ ddd: string | null; total: number }[]>`
+      SELECT CASE WHEN phone ~ '^55[0-9]{10,11}$' THEN substring(phone from 3 for 2) END AS ddd, COUNT(*)::int AS total
+      FROM customers WHERE park_id = ${parkId}::uuid GROUP BY 1`,
+    db.$queryRaw<{ idade: number | null; total: number }[]>`
+      SELECT date_part('year', age(${hoje}::date, birth_date))::int AS idade, COUNT(*)::int AS total
+      FROM customers WHERE park_id = ${parkId}::uuid GROUP BY 1`,
+  ]);
+
+  const total = cidades.reduce((soma, linha) => soma + linha.total, 0);
+  const semCidade = cidades.filter((linha) => !linha.cidade).reduce((soma, linha) => soma + linha.total, 0);
+  const porCidade = new Map<string, AudienceSlice>();
+  for (const linha of cidades) {
+    if (!linha.cidade) continue;
+    const chave = `${linha.cidade}|${linha.uf ?? ''}`;
+    const atual = porCidade.get(chave) ?? {
+      key: chave,
+      label: linha.uf ? `${nomeDeCidade(linha.cidade)} - ${linha.uf}` : nomeDeCidade(linha.cidade),
+      value: 0,
+    };
+    atual.value += linha.total;
+    porCidade.set(chave, atual);
+  }
+  const listaDeCidades = ordenar([...porCidade.values()]);
+  const outras = listaDeCidades.slice(CIDADES_NO_GRAFICO).reduce((soma, fatia) => soma + fatia.value, 0);
+  const cities = [
+    ...listaDeCidades.slice(0, CIDADES_NO_GRAFICO),
+    ...(outras > 0 ? [{ key: 'outras', label: 'Outras cidades', value: outras }] : []),
+    ...(semCidade > 0 ? [{ ...SEM_INFORMACAO, value: semCidade }] : []),
+  ];
+
+  const porRegiao = new Map<string, number>();
+  let semCelular = 0;
+  for (const linha of ddds) {
+    if (!linha.ddd) {
+      semCelular += linha.total;
+      continue;
+    }
+    const regiao = DDD_REGIONS[linha.ddd] ?? 'Outros estados';
+    porRegiao.set(regiao, (porRegiao.get(regiao) ?? 0) + linha.total);
+  }
+  const regions = [
+    ...ordenar([...porRegiao].map(([regiao, value]) => ({ key: regiao, label: regiao, value }))),
+    ...(semCelular > 0 ? [{ key: 'sem-celular', label: 'Sem celular', value: semCelular }] : []),
+  ];
+
+  const porFaixa = new Map<string, number>();
+  let semIdade = 0;
+  for (const linha of idades) {
+    if (linha.idade === null) {
+      semIdade += linha.total;
+      continue;
+    }
+    const faixa = ageBucketOf(linha.idade);
+    porFaixa.set(faixa.key, (porFaixa.get(faixa.key) ?? 0) + linha.total);
+  }
+  const ages = [
+    ...AGE_BUCKETS.flatMap((faixa) => {
+      const value = porFaixa.get(faixa.key) ?? 0;
+      return value > 0 ? [{ key: faixa.key, label: faixa.label, value }] : [];
+    }),
+    ...(semIdade > 0 ? [{ ...SEM_INFORMACAO, value: semIdade }] : []),
+  ];
+
+  return { total, withCity: total - semCidade, withBirthDate: total - semIdade, cities, regions, ages };
 }

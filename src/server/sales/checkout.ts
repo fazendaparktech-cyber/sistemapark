@@ -295,6 +295,9 @@ export async function placeOnlineOrder(
           phone: dados.buyer.phone,
           cpfDigits: dados.buyer.cpf,
           marketingOptIn: dados.marketingOptIn,
+          birthDate: dados.buyer.birthDate,
+          city: dados.buyer.city,
+          state: dados.buyer.state,
         });
 
         for (const linha of linhas) {

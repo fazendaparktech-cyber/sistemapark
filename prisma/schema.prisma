@@ -464,6 +464,9 @@ model Customer {
   email          String?   @db.VarChar(254)
   phone          String?   @db.VarChar(13)
   birthDate      DateTime? @map("birth_date") @db.Date
+  /// Cidade onde mora, informada na compra (perfil do público).
+  city           String?   @db.VarChar(80)
+  state          String?   @db.Char(2)
   /// HMAC do CPF (busca exata). O número completo não é gravado.
   cpfHash        String?   @map("cpf_hash") @db.Char(64)
   cpfMasked      String?   @map("cpf_masked") @db.VarChar(14)

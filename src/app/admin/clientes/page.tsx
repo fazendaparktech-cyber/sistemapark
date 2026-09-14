@@ -2,11 +2,12 @@ import { ChevronRight, Download, Megaphone, Repeat, Search, UserPlus, UsersRound
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { PieBreakdown } from '@/components/admin/charts/pie-breakdown';
 import { NewCustomerDialog } from '@/components/admin/customers/edit-customer-dialog';
 import { MetricCard } from '@/components/admin/metric-card';
 import { NoPermission } from '@/components/admin/no-permission';
 import { buttonClasses } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { Checkbox, Input, Select } from '@/components/ui/field';
 import { PageHeader } from '@/components/ui/page-header';
@@ -20,6 +21,7 @@ import { formatBRL } from '@/lib/money';
 import { can } from '@/server/auth/context';
 import { requirePageAuth } from '@/server/auth/guards';
 import {
+  getAudienceProfile,
   getCustomerSummary,
   listCustomers,
   type CustomerListFilters,
@@ -49,7 +51,11 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
   if (!can(auth, 'customers.view')) return <NoPermission />;
 
   const filtros = parseCustomerFilters(await searchParams);
-  const [resultado, resumo] = await Promise.all([listCustomers(auth, filtros), getCustomerSummary(auth)]);
+  const [resultado, resumo, perfil] = await Promise.all([
+    listCustomers(auth, filtros),
+    getCustomerSummary(auth),
+    getAudienceProfile(auth),
+  ]);
   const filtrando = Boolean(filtros.q || filtros.marketing);
   const filtrosDaPlanilha = consulta({ ...filtros, page: undefined });
   const hrefPagina = (pagina: number) => {
@@ -105,6 +111,50 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
           icon={Megaphone}
           tone="sun"
         />
+      </section>
+
+      <section aria-labelledby="perfil-do-publico" className="grid gap-4">
+        <div>
+          <h2 id="perfil-do-publico" className="font-display text-lg font-semibold text-ink-900">
+            Perfil do público
+          </h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            De onde vêm e qual a idade de quem compra. Cidade e data de nascimento são pedidas na compra pelo
+            site.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader
+              title="Cidades"
+              description={`${formatNumber(perfil.withCity)} de ${formatNumber(perfil.total)} clientes informaram`}
+            />
+            <CardContent className="pt-3">
+              <PieBreakdown
+                slices={perfil.cities}
+                emptyText="As cidades aparecem conforme os clientes compram pelo site."
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader title="Regiões" description="Pelo DDD do celular do cliente" />
+            <CardContent className="pt-3">
+              <PieBreakdown slices={perfil.regions} emptyText="Nenhum cliente com celular cadastrado." />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader
+              title="Faixa etária"
+              description={`${formatNumber(perfil.withBirthDate)} de ${formatNumber(perfil.total)} clientes informaram`}
+            />
+            <CardContent className="pt-3">
+              <PieBreakdown
+                slices={perfil.ages}
+                emptyText="As idades aparecem conforme os clientes compram pelo site."
+              />
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       <form

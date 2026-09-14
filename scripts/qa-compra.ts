@@ -51,6 +51,15 @@ async function main(): Promise<void> {
     timezoneId: 'America/Bahia',
   });
   const page = await contexto.newPage();
+  // Mostra o corpo das respostas de erro da API (ex.: campo recusado na validação).
+  page.on('response', (resposta) => {
+    if (!resposta.url().includes('/api/') || resposta.status() < 400) return;
+    void resposta
+      .text()
+      .then((corpo) =>
+        console.log(`API ${resposta.status()} ${new URL(resposta.url()).pathname}: ${corpo.slice(0, 400)}`),
+      );
+  });
   page.on('console', (mensagem) => {
     if (mensagem.type() === 'error') errosDoConsole.push(mensagem.text().slice(0, 200));
   });
@@ -84,6 +93,8 @@ async function main(): Promise<void> {
     await page.locator('#comprador-email').fill(`qa-${Date.now()}@example.com`);
     await page.locator('#comprador-celular').fill('73999998888');
     await page.locator('#comprador-cpf').fill(cpfDeTeste());
+    await page.locator('#comprador-nascimento').fill('1990-05-20');
+    await page.locator('#comprador-cidade').fill('Ubatã');
     await page.getByLabel(/Eu também vou ao parque/).check();
 
     const nomes = page.locator('input[id^="visitante-"][id$="-nome"]');
@@ -92,7 +103,7 @@ async function main(): Promise<void> {
       const campo = nomes.nth(i);
       if (!(await campo.inputValue())) await campo.fill(`Visitante ${i + 1} da Silva`);
     }
-    const nascimentos = page.locator('input[id$="-nascimento"]');
+    const nascimentos = page.locator('input[id^="visitante-"][id$="-nascimento"]');
     for (let i = 0; i < (await nascimentos.count()); i++) await nascimentos.nth(i).fill('2019-05-10');
 
     await page.locator('#cupom').fill('VERAO10');

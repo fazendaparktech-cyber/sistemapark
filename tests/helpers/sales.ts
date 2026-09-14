@@ -115,6 +115,9 @@ export function comprador(sobrescrever: Partial<CheckoutInput['buyer']> = {}): C
     email: `maria-${randomUUID().slice(0, 8)}@teste.dev`,
     phone: '(73) 99999-8888',
     cpf: novoCpf(),
+    birthDate: '1990-05-20',
+    city: 'Ubatã',
+    state: 'BA',
     ...sobrescrever,
   };
 }

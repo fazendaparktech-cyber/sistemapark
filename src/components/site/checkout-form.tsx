@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { api, ApiError, errorMessage } from '@/lib/api-client';
+import { BRAZIL_STATES } from '@/lib/audience';
 import { formatCpfInput } from '@/lib/documents';
 import { formatBRL } from '@/lib/money';
 import {
@@ -20,7 +21,7 @@ import { formatDateLong } from '@/lib/weekdays';
 
 import { Alert } from '../ui/alert';
 import { Button, buttonClasses } from '../ui/button';
-import { Checkbox, Field, fieldIds, Input } from '../ui/field';
+import { Checkbox, Field, fieldIds, Input, Select } from '../ui/field';
 import { formatSeconds, useSecondsLeft } from './countdown';
 
 export interface CheckoutCartItem {
@@ -90,6 +91,9 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
   const [email, setEmail] = useState('');
   const [celular, setCelular] = useState('');
   const [cpf, setCpf] = useState('');
+  const [nascimento, setNascimento] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [uf, setUf] = useState('BA');
   const [visitantes, setVisitantes] = useState<Visitante[]>(() =>
     cart.items.flatMap((item) =>
       item.holder.name
@@ -176,6 +180,8 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
     if (!email.includes('@')) faltando['buyer.email'] = 'Informe um e-mail válido.';
     if (celular.replace(/\D/g, '').length < 10) faltando['buyer.phone'] = 'Informe o celular com DDD.';
     if (cpf.replace(/\D/g, '').length !== 11) faltando['buyer.cpf'] = 'Informe o CPF.';
+    if (!nascimento) faltando['buyer.birthDate'] = 'Informe a data de nascimento.';
+    if (cidade.trim().length < 2) faltando['buyer.city'] = 'Informe a cidade onde mora.';
     visitantes.forEach((visitante, indice) => {
       if (visitante.name.trim().length < 3) faltando[`holders.${indice}.name`] = 'Informe o nome completo.';
       if (visitante.pedeNascimento && !visitante.birthDate)
@@ -197,7 +203,7 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
       const resultado = await api<{ url: string; code: string; totalCents: number }>('/api/public/checkout', {
         method: 'POST',
         body: {
-          buyer: { name: nome, email, phone: celular, cpf },
+          buyer: { name: nome, email, phone: celular, cpf, birthDate: nascimento, city: cidade, state: uf },
           holders: visitantes.map((visitante) => ({
             ticketTypeId: visitante.ticketTypeId,
             name: visitante.name,
@@ -351,6 +357,46 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
                 {...fieldIds('comprador-cpf', { hint: true, error: campos['buyer.cpf'] })}
               />
             </Field>
+            <Field
+              id="comprador-nascimento"
+              label="Data de nascimento"
+              required
+              error={campos['buyer.birthDate']}
+            >
+              <Input
+                id="comprador-nascimento"
+                type="date"
+                autoComplete="bday"
+                value={nascimento}
+                onChange={(evento) => setNascimento(evento.target.value)}
+                {...fieldIds('comprador-nascimento', { error: campos['buyer.birthDate'] })}
+              />
+            </Field>
+            <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 sm:col-span-2">
+              <Field id="comprador-cidade" label="Cidade onde mora" required error={campos['buyer.city']}>
+                <Input
+                  id="comprador-cidade"
+                  autoComplete="address-level2"
+                  value={cidade}
+                  onChange={(evento) => setCidade(evento.target.value)}
+                  {...fieldIds('comprador-cidade', { error: campos['buyer.city'] })}
+                />
+              </Field>
+              <Field id="comprador-uf" label="UF" required error={campos['buyer.state']}>
+                <Select
+                  id="comprador-uf"
+                  value={uf}
+                  onChange={(evento) => setUf(evento.target.value)}
+                  {...fieldIds('comprador-uf', { error: campos['buyer.state'] })}
+                >
+                  {BRAZIL_STATES.map((sigla) => (
+                    <option key={sigla} value={sigla}>
+                      {sigla}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
           </div>
         </section>
 
