@@ -1,12 +1,21 @@
 import {
   BadgePercent,
-  CalendarDays,
+  CalendarRange,
+  CircleDashed,
   CircleDollarSign,
+  Clock,
   DoorOpen,
-  Percent,
+  Gauge,
+  Globe,
   ReceiptText,
+  Store,
   Ticket,
   UserCheck,
+  UserPlus,
+  UserRound,
+  Users,
+  UsersRound,
+  UserX,
   Wallet,
 } from 'lucide-react';
 import type { Metadata } from 'next';
@@ -14,23 +23,23 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { BarList } from '@/components/admin/bar-list';
-import { ColumnChart } from '@/components/admin/charts/column-chart';
 import { SalesChart } from '@/components/admin/charts/sales-chart';
+import { VisitorsChart } from '@/components/admin/charts/visitors-chart';
 import { KpiCard } from '@/components/admin/kpi-card';
 import { firstAllowedHref } from '@/components/admin/nav';
 import { PeriodFilter } from '@/components/admin/period-filter';
 import { SalesLink } from '@/components/admin/sales-link';
-import { ChannelBadge, OrderStatusBadge } from '@/components/admin/status-badges';
+import { ChannelBadge, SaleStatusBadge } from '@/components/admin/status-badges';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { cn } from '@/components/ui/cn';
 import { PageHeader } from '@/components/ui/page-header';
 import { Table, TableContainer, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { formatDateBR, formatDateTimeBR, todayIn, weekdayOf } from '@/lib/dates';
 import { formatNumber, formatPercent, plural } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
 import { formatBRL } from '@/lib/money';
-import { ORDER_CHANNEL_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/orders';
+import { ORDER_CHANNEL_LABELS, PAYMENT_GROUP_LABELS } from '@/lib/orders';
+import { ORIGIN_LABELS } from '@/lib/origins';
 import { parsePeriod } from '@/lib/periods';
 import { DAY_KIND_LABELS } from '@/lib/pricing';
 import { formatRelativeTime } from '@/lib/relative-time';
@@ -40,7 +49,7 @@ import { requirePageAuth } from '@/server/auth/guards';
 import { getDashboard, type UpcomingDay } from '@/server/dashboard/metrics';
 import { env } from '@/server/env';
 
-export const metadata: Metadata = { title: 'Painel' };
+export const metadata: Metadata = { title: 'Dashboard' };
 
 type Parametros = Record<string, string | string[] | undefined>;
 
@@ -49,6 +58,8 @@ function primeiro(valor: string | string[] | undefined): string | undefined {
 }
 
 const LINK = 'text-sm font-semibold text-pool-700 hover:text-pool-800';
+const GRADE = 'grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+const COMPARADO = 'comparado ao período anterior';
 
 function Ocupacao({ dia }: { dia: UpcomingDay }) {
   const aberto = dia.status === 'OPEN' && dia.capacity !== null && dia.capacity > 0;
@@ -58,7 +69,7 @@ function Ocupacao({ dia }: { dia: UpcomingDay }) {
   const especial = dia.dayKind === 'HOLIDAY' || dia.dayKind === 'EVENT' || dia.dayKind === 'SPECIAL';
 
   return (
-    <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 py-2.5 sm:grid-cols-[5.5rem_minmax(0,1fr)_7rem]">
+    <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 py-2.5 sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem]">
       <div className="leading-tight">
         <p className="text-[13px] font-semibold text-ink-900">
           {WEEKDAY_SHORT_LABELS[weekdayOf(dia.date)]} {formatShortDate(dia.date)}
@@ -74,20 +85,22 @@ function Ocupacao({ dia }: { dia: UpcomingDay }) {
             <div className="h-full bg-sun-300" style={{ width: `${reservadas}%` }} />
           </div>
           <p className="tabular mt-1 text-xs text-ink-500 sm:hidden">
-            {formatNumber(dia.sold)} de {formatNumber(capacidade)} vendidos
+            {formatNumber(dia.sold)} de {formatNumber(capacidade)} · {formatPercent(dia.sold / capacidade)}
           </p>
         </div>
       ) : (
         <p className="text-xs text-ink-400">{dia.status === 'CLOSED' ? 'Fechado' : 'Não configurado'}</p>
       )}
       <p className="tabular hidden text-right text-xs text-ink-600 sm:block">
-        {aberto ? `${formatNumber(dia.sold)} / ${formatNumber(capacidade)}` : ''}
+        {aberto
+          ? `${formatNumber(dia.sold)} / ${formatNumber(capacidade)} · ${formatPercent(dia.sold / capacidade)}`
+          : ''}
       </p>
     </li>
   );
 }
 
-export default async function PainelPage({ searchParams }: { searchParams: Promise<Parametros> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<Parametros> }) {
   const auth = await requirePageAuth();
   const agora = new Date();
   const primeiroNome = auth.user.name.trim().split(/\s+/)[0] ?? auth.user.name;
@@ -110,7 +123,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const periodo = parsePeriod(
     { periodo: primeiro(parametros.periodo), de: primeiro(parametros.de), ate: primeiro(parametros.ate) },
     todayIn(auth.park.timezone),
-    '30d',
+    'mes',
   );
   const painel = await getDashboard(auth, periodo);
   const { kpis, today: hoje } = painel;
@@ -121,217 +134,323 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       : `${formatDateBR(periodo.range.from)} a ${formatDateBR(periodo.range.to)}`;
   const semVendas = kpis.orders.value === 0;
   const totalDeIngressosPorTipo = painel.byTicketType.reduce((soma, tipo) => soma + tipo.tickets, 0);
+  const totalDeVendasPorCanal = painel.byChannel.reduce((soma, canal) => soma + canal.orders, 0);
+  const aberto = hoje.status === 'OPEN';
 
   return (
     <div className="grid gap-6 lg:gap-8">
       <PageHeader
         eyebrow={auth.park.name}
         title={saudacao}
-        description={`Vendas confirmadas de ${intervalo}, comparadas com o período anterior de mesmo tamanho.`}
+        description="Vendas, faturamento, visitantes e ocupação do parque."
       />
-      <PeriodFilter basePath="/admin" period={periodo} />
 
       {painel.refundsDue.orders > 0 ? (
         <Alert tone="warning" title="Pagamentos a devolver">
-          {plural(painel.refundsDue.orders, 'pedido foi pago', 'pedidos foram pagos')} sem ingresso liberado
-          (pagamento fora do prazo sem vaga ou depois de cancelado)
+          {plural(painel.refundsDue.orders, 'venda foi paga', 'vendas foram pagas')} sem ingresso liberado
+          (pagamento fora do prazo sem vaga ou depois de cancelada)
           {painel.refundsDue.amountCents !== null
             ? `, somando ${formatBRL(painel.refundsDue.amountCents)}`
             : ''}
           .{' '}
           <Link href="/admin/vendas?financeiro=PAID&situacao=CANCELLED" className="font-semibold underline">
-            Ver pedidos
+            Ver vendas
           </Link>
         </Alert>
       ) : null}
 
-      <section
-        aria-label="Indicadores do período"
-        className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 xl:grid-cols-4"
-      >
-        {kpis.revenue ? (
+      <section aria-labelledby="hoje-no-parque" className="grid gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 id="hoje-no-parque" className="font-display text-[19px] font-semibold text-ink-900">
+              Hoje no parque
+            </h2>
+            <p className="text-sm text-ink-500">
+              {formatDateBR(hoje.date)} ·{' '}
+              {aberto
+                ? hoje.opensAt && hoje.closesAt
+                  ? `aberto das ${hoje.opensAt} às ${hoje.closesAt}`
+                  : 'aberto'
+                : hoje.status === 'CLOSED'
+                  ? 'fechado hoje'
+                  : 'dia não configurado no calendário'}
+              {hoje.label ? ` · ${hoje.label}` : ''}
+            </p>
+          </div>
+          {can(auth, 'checkin.monitor') ? (
+            <Link href="/admin/portaria" className={LINK}>
+              Abrir portaria
+            </Link>
+          ) : null}
+        </div>
+        <div className={GRADE}>
+          {hoje.revenue ? (
+            <KpiCard
+              label="Faturamento hoje"
+              value={formatBRL(hoje.revenue.value)}
+              change={hoje.revenue.change}
+              hint="comparado a ontem"
+              icon={CircleDollarSign}
+            />
+          ) : null}
+          {hoje.monthRevenue ? (
+            <KpiCard
+              label="Faturamento do mês"
+              value={formatBRL(hoje.monthRevenue.value)}
+              change={hoje.monthRevenue.change}
+              hint="comparado aos mesmos dias do mês anterior"
+              icon={CalendarRange}
+              tone="grape"
+            />
+          ) : null}
           <KpiCard
-            label="Receita"
-            value={formatBRL(kpis.revenue.value)}
-            change={kpis.revenue.change}
-            hint={`antes ${formatBRL(kpis.revenue.previous)}`}
-            icon={CircleDollarSign}
-          />
-        ) : null}
-        <KpiCard
-          label="Pedidos pagos"
-          value={formatNumber(kpis.orders.value)}
-          change={kpis.orders.change}
-          hint={`antes ${formatNumber(kpis.orders.previous)}`}
-          icon={ReceiptText}
-          tone="grape"
-        />
-        <KpiCard
-          label="Ingressos vendidos"
-          value={formatNumber(kpis.tickets.value)}
-          change={kpis.tickets.change}
-          hint={`antes ${formatNumber(kpis.tickets.previous)}`}
-          icon={Ticket}
-          tone="sun"
-        />
-        {kpis.averageOrder ? (
-          <KpiCard
-            label="Valor médio do pedido"
-            value={formatBRL(kpis.averageOrder.value)}
-            change={kpis.averageOrder.change}
-            hint={`antes ${formatBRL(kpis.averageOrder.previous)}`}
-            icon={Wallet}
-            tone="citrus"
-          />
-        ) : null}
-        <KpiCard
-          label="Clientes novos"
-          value={formatNumber(kpis.newCustomers.value)}
-          change={kpis.newCustomers.change}
-          hint="primeira compra no período"
-          icon={UserCheck}
-          tone="pool"
-        />
-        <KpiCard
-          label="Conversão do site"
-          value={formatPercent(kpis.conversion.value)}
-          change={kpis.conversion.change}
-          changeKind="points"
-          hint="pedidos criados que foram pagos"
-          icon={Percent}
-          tone="grape"
-        />
-        <KpiCard
-          label="Entradas na portaria"
-          value={formatNumber(kpis.checkins.value)}
-          change={kpis.checkins.change}
-          hint={`antes ${formatNumber(kpis.checkins.previous)}`}
-          icon={DoorOpen}
-          tone="ink"
-        />
-        {kpis.discounts ? (
-          <KpiCard
-            label="Descontos concedidos"
-            value={formatBRL(kpis.discounts.value)}
-            change={kpis.discounts.change}
-            inverse
-            hint="em cupons"
-            icon={BadgePercent}
+            label="Ingressos vendidos hoje"
+            value={formatNumber(hoje.ticketsSold.value)}
+            change={hoje.ticketsSold.change}
+            hint="comparado a ontem"
+            icon={Ticket}
             tone="sun"
           />
-        ) : null}
+          <KpiCard
+            label="Visitantes esperados hoje"
+            value={formatNumber(hoje.expected)}
+            hint="ingressos válidos para hoje"
+            icon={Users}
+            tone="citrus"
+          />
+          <KpiCard
+            label="Check-ins hoje"
+            value={formatNumber(hoje.checkedIn)}
+            hint={
+              hoje.attendance !== null
+                ? `${formatPercent(hoje.attendance)} dos esperados`
+                : 'nenhuma entrada ainda'
+            }
+            icon={DoorOpen}
+            tone="pool"
+          />
+          <KpiCard
+            label="Ainda não chegaram"
+            value={formatNumber(hoje.notArrived)}
+            hint="com ingresso para hoje"
+            icon={Clock}
+            tone="ink"
+          />
+          <KpiCard
+            label="Capacidade máxima"
+            value={hoje.capacity !== null ? formatNumber(hoje.capacity) : aberto ? 'Livre' : 'Fechado'}
+            hint="pessoas no dia"
+            icon={UsersRound}
+            tone="grape"
+          />
+          <KpiCard
+            label="Capacidade disponível"
+            value={hoje.available !== null ? formatNumber(hoje.available) : 'Sem venda'}
+            hint={
+              hoje.held > 0 ? `${formatNumber(hoje.held)} vagas em pagamento pendente` : 'vagas para vender'
+            }
+            icon={CircleDashed}
+            tone="citrus"
+          />
+          <KpiCard
+            label="Ocupação"
+            value={hoje.occupancy !== null ? formatPercent(hoje.occupancy) : 'Sem capacidade'}
+            hint={hoje.capacity !== null ? `${formatNumber(hoje.sold)} vendidos` : undefined}
+            icon={Gauge}
+            tone="sun"
+          />
+          <KpiCard
+            label="Comparecimento hoje"
+            value={hoje.attendance !== null ? formatPercent(hoje.attendance) : 'Sem ingressos'}
+            hint="check-ins ÷ ingressos do dia"
+            icon={UserCheck}
+            tone="pool"
+          />
+        </div>
       </section>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <section aria-labelledby="periodo" className="grid gap-4">
+        <div className="grid gap-3">
+          <div>
+            <h2 id="periodo" className="font-display text-[19px] font-semibold text-ink-900">
+              Período: {intervalo}
+            </h2>
+            <p className="text-sm text-ink-500">
+              Cada indicador é comparado ao período anterior de mesmo tamanho.
+            </p>
+          </div>
+          <PeriodFilter basePath="/admin" period={periodo} />
+        </div>
+        <div className={GRADE}>
+          {kpis.revenue ? (
+            <KpiCard
+              label="Faturamento"
+              value={formatBRL(kpis.revenue.value)}
+              change={kpis.revenue.change}
+              hint={COMPARADO}
+              icon={CircleDollarSign}
+            />
+          ) : null}
+          <KpiCard
+            label="Total de vendas"
+            value={formatNumber(kpis.orders.value)}
+            change={kpis.orders.change}
+            hint={`${plural(kpis.tickets.value, 'ingresso', 'ingressos')} vendidos`}
+            icon={ReceiptText}
+            tone="grape"
+          />
+          {kpis.averageOrder ? (
+            <KpiCard
+              label="Ticket médio"
+              value={formatBRL(kpis.averageOrder.value)}
+              change={kpis.averageOrder.change}
+              hint="faturamento ÷ vendas"
+              icon={Wallet}
+              tone="citrus"
+            />
+          ) : null}
+          {kpis.averagePerVisitor ? (
+            <KpiCard
+              label="Valor médio por visitante"
+              value={formatBRL(kpis.averagePerVisitor.value)}
+              change={kpis.averagePerVisitor.change}
+              hint="faturamento ÷ ingressos"
+              icon={UserRound}
+              tone="sun"
+            />
+          ) : null}
+          <KpiCard
+            label="Vendas online"
+            value={formatNumber(kpis.onlineOrders.value)}
+            change={kpis.onlineOrders.change}
+            hint={kpis.onlineRevenue ? formatBRL(kpis.onlineRevenue.value) : COMPARADO}
+            icon={Globe}
+            tone="pool"
+          />
+          <KpiCard
+            label="Vendas presenciais"
+            value={formatNumber(kpis.posOrders.value)}
+            change={kpis.posOrders.change}
+            hint={kpis.posRevenue ? formatBRL(kpis.posRevenue.value) : COMPARADO}
+            icon={Store}
+            tone="grape"
+          />
+          {kpis.discounts ? (
+            <KpiCard
+              label="Desconto concedido"
+              value={formatBRL(kpis.discounts.value)}
+              change={kpis.discounts.change}
+              inverse
+              hint="cupons e descontos no balcão"
+              icon={BadgePercent}
+              tone="sun"
+            />
+          ) : null}
+          <KpiCard
+            label="Clientes novos"
+            value={formatNumber(kpis.newCustomers.value)}
+            change={kpis.newCustomers.change}
+            hint={`${plural(kpis.returningCustomers.value, 'recorrente', 'recorrentes')} compraram de novo`}
+            icon={UserPlus}
+            tone="citrus"
+          />
+          <KpiCard
+            label="Taxa de comparecimento"
+            value={kpis.attendance ? formatPercent(kpis.attendance.value) : 'Sem dias encerrados'}
+            change={kpis.attendance ? kpis.attendance.change : undefined}
+            changeKind="points"
+            hint="check-ins ÷ ingressos das datas já passadas"
+            icon={UserCheck}
+            tone="pool"
+          />
+          <KpiCard
+            label="No-show"
+            value={kpis.noShow ? formatNumber(kpis.noShow.value) : 'Sem dias encerrados'}
+            change={kpis.noShow ? kpis.noShow.change : undefined}
+            inverse
+            hint="ingressos pagos que não entraram"
+            icon={UserX}
+            tone="ink"
+          />
+        </div>
+      </section>
+
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Card>
-          <CardHeader title="Vendas no período" description={intervalo} />
+          <CardHeader
+            title={financeiro ? 'Faturamento e ingressos por dia' : 'Vendas e ingressos por dia'}
+            description={intervalo}
+          />
           <CardContent>
             <SalesChart points={painel.series} showRevenue={financeiro} />
             {semVendas ? (
-              <p className="mt-3 text-center text-sm text-ink-500">Nenhuma venda confirmada neste período.</p>
+              <p className="mt-3 text-center text-sm text-ink-500">Nenhuma venda paga neste período.</p>
             ) : null}
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
-          <Card>
-            <CardHeader
-              title="Hoje no parque"
-              description={
-                hoje.status === 'OPEN'
-                  ? hoje.opensAt && hoje.closesAt
-                    ? `Aberto das ${hoje.opensAt} às ${hoje.closesAt}`
-                    : 'Aberto'
-                  : hoje.status === 'CLOSED'
-                    ? 'Fechado hoje'
-                    : 'Hoje não está configurado no calendário'
-              }
-              action={
-                can(auth, 'calendar.view') ? (
-                  <Link href="/admin/calendario" className={LINK}>
-                    Calendário
-                  </Link>
-                ) : null
-              }
-            />
-            <CardContent>
-              {hoje.status === 'OPEN' ? (
-                <div className="grid gap-4">
-                  <dl className="grid grid-cols-3 gap-3 text-center">
-                    {[
-                      { rotulo: 'Esperados', valor: hoje.expected },
-                      { rotulo: 'Já entraram', valor: hoje.checkedIn },
-                      { rotulo: 'Vagas livres', valor: hoje.available ?? 0 },
-                    ].map((item) => (
-                      <div
-                        key={item.rotulo}
-                        className="rounded-xl bg-ink-50 px-2 py-3 ring-1 ring-inset ring-ink-200/70"
-                      >
-                        <dt className="text-xs font-semibold text-ink-500">{item.rotulo}</dt>
-                        <dd className="tabular mt-1 font-display text-2xl font-semibold text-ink-900">
-                          {formatNumber(item.valor)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div>
-                    <div className="flex justify-between text-xs text-ink-500">
-                      <span>Entradas</span>
-                      <span className="tabular">
-                        {hoje.expected > 0 ? formatPercent(hoje.checkedIn / hoje.expected) : '0%'}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-100">
-                      <div
-                        className="h-full rounded-full bg-citrus-500"
-                        style={{
-                          width: `${hoje.expected > 0 ? Math.min(100, (hoje.checkedIn / hoje.expected) * 100) : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[13px] leading-5 text-ink-500">
-                    Lotação de {formatNumber(hoje.capacity ?? 0)} pessoas
-                    {hoje.held > 0 ? `; ${formatNumber(hoje.held)} em compras ainda não pagas` : ''}.
-                  </p>
+        <Card>
+          <CardHeader title="Online x presencial" description="Vendas pagas no período" />
+          <CardContent className="grid gap-5">
+            {totalDeVendasPorCanal === 0 ? (
+              <p className="py-6 text-center text-sm text-ink-500">Nenhuma venda paga no período.</p>
+            ) : (
+              <>
+                <div className="flex h-3 overflow-hidden rounded-full bg-ink-100">
+                  {painel.byChannel.map((canal) => (
+                    <div
+                      key={canal.channel}
+                      className={canal.channel === 'ONLINE' ? 'bg-pool-500' : 'bg-grape-500'}
+                      style={{ width: `${(canal.orders / totalDeVendasPorCanal) * 100}%` }}
+                    />
+                  ))}
                 </div>
-              ) : (
-                <p className="text-sm leading-6 text-ink-600">
-                  {hoje.status === 'CLOSED'
-                    ? 'O parque não abre hoje. As vendas continuam para as próximas datas abertas.'
-                    : 'Configure o dia de hoje no calendário para vender e receber visitantes.'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader title="Pedidos aguardando pagamento" />
-            <CardContent className="flex items-end justify-between gap-3 pt-3">
-              <div>
-                <p className="tabular font-display text-3xl font-semibold text-ink-900">
-                  {formatNumber(painel.pending.orders)}
-                </p>
-                <p className="mt-1 text-[13px] text-ink-500">
-                  {painel.pending.amountCents !== null && painel.pending.orders > 0
-                    ? `${formatBRL(painel.pending.amountCents)} em PIX dentro do prazo`
-                    : 'PIX gerados e ainda no prazo de pagamento'}
-                </p>
-              </div>
-              {can(auth, 'orders.view') && painel.pending.orders > 0 ? (
-                <Link href="/admin/vendas?situacao=PENDING" className={LINK}>
-                  Ver pedidos
-                </Link>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
+                <ul className="grid gap-4">
+                  {painel.byChannel.map((canal) => (
+                    <li key={canal.channel} className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          aria-hidden
+                          className={`mt-1.5 size-2.5 rounded-full ${canal.channel === 'ONLINE' ? 'bg-pool-500' : 'bg-grape-500'}`}
+                        />
+                        <div>
+                          <p className="font-semibold text-ink-900">{ORDER_CHANNEL_LABELS[canal.channel]}</p>
+                          <p className="text-[13px] text-ink-500">
+                            {plural(canal.orders, 'venda', 'vendas')} ·{' '}
+                            {plural(canal.tickets, 'ingresso', 'ingressos')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="tabular font-semibold text-ink-900">
+                          {formatPercent(canal.orders / totalDeVendasPorCanal)}
+                        </p>
+                        {financeiro ? (
+                          <p className="tabular text-[13px] text-ink-500">{formatBRL(canal.revenueCents)}</p>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <div className="grid items-start gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader
-            title="Ingressos por tipo"
+            title="Visitantes por dia"
+            description="Ingressos válidos para cada data de visita e entradas registradas"
+          />
+          <CardContent>
+            <VisitorsChart points={painel.visitors} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Tipos mais vendidos"
             description={`${plural(totalDeIngressosPorTipo, 'ingresso', 'ingressos')} no período`}
           />
           <CardContent>
@@ -340,103 +459,107 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               items={painel.byTicketType.map((tipo) => ({
                 key: tipo.name,
                 label: tipo.name,
-                value: financeiro ? tipo.revenueCents : tipo.tickets,
-                valueLabel: financeiro ? formatBRL(tipo.revenueCents) : formatNumber(tipo.tickets),
-                detail: financeiro ? plural(tipo.tickets, 'ingresso', 'ingressos') : undefined,
+                value: tipo.tickets,
+                valueLabel: plural(tipo.tickets, 'ingresso', 'ingressos'),
+                detail: financeiro ? formatBRL(tipo.revenueCents) : undefined,
               }))}
             />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader title="Canais de venda" description="Pedidos pagos por canal" />
-          <CardContent>
-            <BarList
-              tone="grape"
-              emptyText="Nenhum pedido pago no período."
-              items={painel.byChannel.map((canal) => ({
-                key: canal.channel,
-                label: ORDER_CHANNEL_LABELS[canal.channel],
-                value: canal.orders,
-                valueLabel: plural(canal.orders, 'pedido', 'pedidos'),
-                detail: financeiro ? formatBRL(canal.revenueCents) : undefined,
-              }))}
-            />
-          </CardContent>
-        </Card>
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-2 xl:grid-cols-3">
         {financeiro ? (
           <Card>
             <CardHeader title="Formas de pagamento" description="Valor recebido, já sem reembolsos" />
             <CardContent>
               <BarList
                 tone="citrus"
-                emptyText="Nenhum pagamento aprovado no período."
-                items={painel.byPaymentMethod.map((metodo) => ({
-                  key: metodo.method,
-                  label: PAYMENT_METHOD_LABELS[metodo.method],
-                  value: metodo.amountCents,
-                  valueLabel: formatBRL(metodo.amountCents),
-                  detail: plural(metodo.payments, 'pagamento', 'pagamentos'),
+                emptyText="Nenhum pagamento recebido no período."
+                items={painel.byPaymentGroup.map((grupo) => ({
+                  key: grupo.group,
+                  label: PAYMENT_GROUP_LABELS[grupo.group],
+                  value: grupo.amountCents,
+                  valueLabel: formatBRL(grupo.amountCents),
+                  detail: plural(grupo.payments, 'pagamento', 'pagamentos'),
                 }))}
               />
             </CardContent>
           </Card>
-        ) : (
+        ) : null}
+        {painel.byOrigin ? (
           <Card>
-            <CardHeader title="Origem das vendas" description="Pedidos pagos no site por origem" />
+            <CardHeader
+              title="Vendas por origem"
+              description="Vendas online pagas, pela campanha ou pelo site de onde o cliente veio"
+              action={
+                can(auth, 'ticket_types.view') ? (
+                  <Link href="/admin/tipos-de-ingresso" className={LINK}>
+                    Links de campanha
+                  </Link>
+                ) : null
+              }
+            />
             <CardContent>
               <BarList
                 tone="sun"
-                emptyText="Nenhum pedido pago no site no período."
-                items={(painel.topSources ?? []).map((origem) => ({
-                  key: origem.source,
-                  label: origem.source,
+                emptyText="Nenhuma venda online paga no período."
+                items={painel.byOrigin.map((origem) => ({
+                  key: origem.origin,
+                  label: ORIGIN_LABELS[origem.origin],
                   value: origem.orders,
-                  valueLabel: plural(origem.orders, 'pedido', 'pedidos'),
+                  valueLabel: plural(origem.orders, 'venda', 'vendas'),
+                  detail: financeiro ? formatBRL(origem.revenueCents) : undefined,
                 }))}
               />
             </CardContent>
           </Card>
-        )}
+        ) : null}
+        {painel.topCoupons ? (
+          <Card>
+            <CardHeader
+              title="Cupons mais usados"
+              action={
+                can(auth, 'coupons.view') ? (
+                  <Link href="/admin/cupons" className={LINK}>
+                    Ver cupons
+                  </Link>
+                ) : null
+              }
+            />
+            <CardContent className="pt-3">
+              {painel.topCoupons.length > 0 ? (
+                <ul className="divide-y divide-ink-100">
+                  {painel.topCoupons.map((cupom) => (
+                    <li key={cupom.code} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-semibold text-ink-900">{cupom.code}</p>
+                        <p className="text-xs text-ink-500">{plural(cupom.uses, 'uso', 'usos')}</p>
+                      </div>
+                      {financeiro ? (
+                        <div className="text-right text-xs text-ink-500">
+                          <p className="tabular text-sm font-semibold text-ink-900">
+                            {formatBRL(cupom.revenueCents)}
+                          </p>
+                          <p className="tabular">{formatBRL(cupom.discountCents)} de desconto</p>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-4 text-center text-sm text-ink-500">Nenhum cupom usado no período.</p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Horário das compras"
-            description="Pedidos pagos por hora em que a compra começou"
-          />
-          <CardContent>
-            <ColumnChart
-              singular="pedido"
-              plural="pedidos"
-              data={painel.byHour.map((hora) => ({ label: `${hora.hour}h`, value: hora.orders }))}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader
-            title="Dias de visita mais procurados"
-            description="Ingressos vendidos no período, pelo dia da visita"
-          />
-          <CardContent>
-            <ColumnChart
-              singular="ingresso"
-              plural="ingressos"
-              color="#22aac3"
-              data={painel.byWeekday.map((dia) => ({
-                label: WEEKDAY_SHORT_LABELS[dia.weekday] ?? '',
-                value: dia.tickets,
-              }))}
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Ocupação dos próximos 14 dias"
-            description="Vendidos e reservados em relação à lotação"
+            description="Vendidos e reservados em relação à capacidade"
             action={
               can(auth, 'calendar.view') ? (
                 <Link href="/admin/calendario" className={LINK}>
@@ -462,79 +585,35 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid min-w-0 grid-cols-1 gap-6">
+          <Card>
+            <CardHeader title="Vendas aguardando pagamento" />
+            <CardContent className="flex items-end justify-between gap-3 pt-3">
+              <div>
+                <p className="tabular font-display text-3xl font-semibold text-ink-900">
+                  {formatNumber(painel.pending.orders)}
+                </p>
+                <p className="mt-1 text-[13px] text-ink-500">
+                  {painel.pending.amountCents !== null && painel.pending.orders > 0
+                    ? `${formatBRL(painel.pending.amountCents)} em PIX dentro do prazo`
+                    : 'PIX gerados e ainda no prazo de pagamento'}
+                </p>
+              </div>
+              {can(auth, 'orders.view') && painel.pending.orders > 0 ? (
+                <Link href="/admin/vendas?situacao=PENDING" className={LINK}>
+                  Ver vendas
+                </Link>
+              ) : null}
+            </CardContent>
+          </Card>
           {can(auth, 'ticket_types.view') ? (
             <Card>
               <CardHeader
                 title="Página de vendas"
                 description="Link que o cliente usa para escolher a data e comprar. Divulgue nas redes, no WhatsApp e no site."
               />
-              <CardContent className="grid gap-3">
-                <SalesLink url={`${env().APP_URL}/comprar`} />
-                <Link href="/admin/tipos-de-ingresso" className={cn(LINK, 'w-fit')}>
-                  Links por ingresso e campanha
-                </Link>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {painel.showMarketing ? (
-            <Card>
-              <CardHeader
-                title="Cupons mais usados"
-                action={
-                  can(auth, 'coupons.view') ? (
-                    <Link href="/admin/cupons" className={LINK}>
-                      Ver cupons
-                    </Link>
-                  ) : null
-                }
-              />
-              <CardContent className="pt-3">
-                {painel.topCoupons && painel.topCoupons.length > 0 ? (
-                  <ul className="divide-y divide-ink-100">
-                    {painel.topCoupons.map((cupom) => (
-                      <li key={cupom.code} className="flex items-center justify-between gap-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="font-mono text-sm font-semibold text-ink-900">{cupom.code}</p>
-                          <p className="text-xs text-ink-500">{plural(cupom.uses, 'uso', 'usos')}</p>
-                        </div>
-                        {financeiro ? (
-                          <div className="text-right text-xs text-ink-500">
-                            <p className="tabular text-sm font-semibold text-ink-900">
-                              {formatBRL(cupom.revenueCents)}
-                            </p>
-                            <p className="tabular">{formatBRL(cupom.discountCents)} de desconto</p>
-                          </div>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="py-4 text-center text-sm text-ink-500">Nenhum cupom usado no período.</p>
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {financeiro && painel.topSources ? (
-            <Card>
-              <CardHeader
-                title="Origem das vendas"
-                description="Pedidos pagos no site, pela campanha (utm_source)"
-              />
               <CardContent>
-                <BarList
-                  tone="sun"
-                  emptyText="Nenhum pedido pago no site no período."
-                  items={painel.topSources.map((origem) => ({
-                    key: origem.source,
-                    label: origem.source,
-                    value: origem.orders,
-                    valueLabel: plural(origem.orders, 'pedido', 'pedidos'),
-                    detail: formatBRL(origem.revenueCents),
-                  }))}
-                />
+                <SalesLink url={`${env().APP_URL}/comprar`} />
               </CardContent>
             </Card>
           ) : null}
@@ -542,18 +621,18 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       </div>
 
       {painel.recentOrders ? (
-        <section className="grid gap-3" aria-labelledby="ultimos-pedidos">
+        <section className="grid gap-3" aria-labelledby="ultimas-vendas">
           <div className="flex items-center justify-between gap-3">
-            <h2 id="ultimos-pedidos" className="font-display text-[17px] font-semibold text-ink-900">
-              Últimos pedidos
+            <h2 id="ultimas-vendas" className="font-display text-[17px] font-semibold text-ink-900">
+              Últimas vendas
             </h2>
             <Link href="/admin/vendas" className={LINK}>
-              Ver todos
+              Ver todas
             </Link>
           </div>
           {painel.recentOrders.length === 0 ? (
             <Card>
-              <p className="px-6 py-10 text-center text-sm text-ink-500">Nenhum pedido ainda.</p>
+              <p className="px-6 py-10 text-center text-sm text-ink-500">Nenhuma venda ainda.</p>
             </Card>
           ) : (
             <TableContainer>
@@ -561,10 +640,10 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
                 <THead>
                   <tr>
                     <TH>Pedido</TH>
-                    <TH>Comprador</TH>
+                    <TH>Cliente</TH>
                     <TH>Canal</TH>
                     <TH className="text-right">Ingressos</TH>
-                    <TH className="text-right">Total</TH>
+                    <TH className="text-right">Valor</TH>
                     <TH>Situação</TH>
                   </tr>
                 </THead>
@@ -594,7 +673,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
                         {formatBRL(pedido.totalCents)}
                       </TD>
                       <TD>
-                        <OrderStatusBadge status={pedido.status} />
+                        <SaleStatusBadge status={pedido.saleStatus} />
                       </TD>
                     </TR>
                   ))}
@@ -604,12 +683,6 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
           )}
         </section>
       ) : null}
-
-      {can(auth, 'calendar.view') ? null : (
-        <p className="flex items-center gap-2 text-xs text-ink-400">
-          <CalendarDays className="size-3.5" aria-hidden /> Ocupação calculada pelo calendário do parque.
-        </p>
-      )}
     </div>
   );
 }

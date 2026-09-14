@@ -98,7 +98,25 @@ async function conferir(page: Page, caminho: string, arquivo: string): Promise<s
   if (page.url().includes('/entrar')) problemas.push('redirecionou para o login');
   await page.waitForTimeout(700);
   const estouro = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  if (estouro > 1) problemas.push(`página ${estouro}px mais larga que a tela`);
+  if (estouro > 1) {
+    // Aponta os elementos que passam da borda direita, para achar a causa sem abrir o navegador.
+    const culpados = await page.evaluate(() =>
+      [...document.querySelectorAll('body *')]
+        .filter((elemento) => elemento.getBoundingClientRect().right > window.innerWidth + 1)
+        .filter(
+          (elemento) =>
+            ![...elemento.children].some(
+              (filho) => filho.getBoundingClientRect().right > window.innerWidth + 1,
+            ),
+        )
+        .slice(0, 3)
+        .map(
+          (elemento) =>
+            `${elemento.tagName.toLowerCase()}.${String(elemento.getAttribute('class') ?? '').slice(0, 90)}`,
+        ),
+    );
+    problemas.push(`página ${estouro}px mais larga que a tela: ${culpados.join(' | ')}`);
+  }
   await page.screenshot({ path: arquivo, fullPage: true });
 
   page.off('console', aoConsole);

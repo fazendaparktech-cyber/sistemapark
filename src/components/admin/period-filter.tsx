@@ -9,11 +9,11 @@ import { Input, Label } from '../ui/field';
 
 const ATALHOS: { key: PeriodPreset; label: string }[] = [
   { key: 'hoje', label: 'Hoje' },
+  { key: 'ontem', label: 'Ontem' },
   { key: '7d', label: '7 dias' },
   { key: '30d', label: '30 dias' },
   { key: 'mes', label: 'Este mês' },
   { key: 'mes-anterior', label: 'Mês anterior' },
-  { key: 'ano', label: 'Este ano' },
 ];
 
 const PILULA = 'whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors';
