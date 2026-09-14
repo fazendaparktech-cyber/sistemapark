@@ -6,7 +6,9 @@
  * e no celular, e aponta erro de console e página mais larga que a tela.
  * No fim, encerra a sessão criada.
  *
- *   npx tsx --conditions=react-server scripts/qa-capturas.ts [email] [pasta]
+ *   npx tsx --conditions=react-server scripts/qa-capturas.ts [email] [pasta] [trecho-do-nome]
+ *
+ * Com o terceiro argumento, captura só as páginas cujo nome contém o trecho (ex.: "venda").
  */
 import 'dotenv/config';
 
@@ -64,8 +66,9 @@ async function paginas(parkId: string): Promise<{ nome: string; caminho: string 
     ...(pendente ? [{ nome: 'site-pedido-pix', caminho: linkDoPedido(pendente) }] : []),
     { nome: 'painel', caminho: '/admin' },
     { nome: 'painel-7-dias', caminho: '/admin?periodo=7d' },
-    { nome: 'pedidos', caminho: '/admin/pedidos' },
-    ...(pedido ? [{ nome: 'pedido', caminho: `/admin/pedidos/${pedido.id}` }] : []),
+    { nome: 'vendas', caminho: '/admin/vendas' },
+    { nome: 'nova-venda', caminho: '/admin/vendas/nova' },
+    ...(pedido ? [{ nome: 'venda', caminho: `/admin/vendas/${pedido.id}` }] : []),
     { nome: 'clientes', caminho: '/admin/clientes' },
     ...(cliente ? [{ nome: 'cliente', caminho: `/admin/clientes/${cliente.id}` }] : []),
     { nome: 'cupons', caminho: '/admin/cupons' },
@@ -125,7 +128,8 @@ async function main(): Promise<void> {
   });
 
   const navegador = await chromium.launch();
-  const lista = await paginas(parkId);
+  const trecho = process.argv[4];
+  const lista = (await paginas(parkId)).filter((item) => !trecho || item.nome.includes(trecho));
   let comProblema = 0;
   try {
     for (const [dispositivo, opcoes] of [

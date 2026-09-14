@@ -7,9 +7,8 @@ import { NoPermission } from '@/components/admin/no-permission';
 import { OrderActions } from '@/components/admin/orders/order-actions';
 import {
   ChannelBadge,
-  FinancialStatusBadge,
-  OrderStatusBadge,
   PaymentStatusBadge,
+  SaleStatusBadge,
   TicketStatusBadge,
 } from '@/components/admin/status-badges';
 import { Alert } from '@/components/ui/alert';
@@ -22,7 +21,12 @@ import { formatDateBR, formatDateTimeBR, formatTimeBR } from '@/lib/dates';
 import { formatPhoneBR } from '@/lib/documents';
 import { formatNumber, plural } from '@/lib/format';
 import { formatBRL } from '@/lib/money';
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, type PaymentStatusKey } from '@/lib/orders';
+import {
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_PROVIDER_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type PaymentStatusKey,
+} from '@/lib/orders';
 import { uuidSchema } from '@/lib/validation';
 import { formatDateLong } from '@/lib/weekdays';
 import { can } from '@/server/auth/context';
@@ -30,7 +34,7 @@ import { requirePageAuth } from '@/server/auth/guards';
 import { isAppError } from '@/server/errors';
 import { getOrderAdmin, type AdminOrderDetail } from '@/server/orders/admin';
 
-export const metadata: Metadata = { title: 'Pedido' };
+export const metadata: Metadata = { title: 'Venda' };
 
 const TRANSACOES: Record<AdminOrderDetail['payments'][number]['transactions'][number]['kind'], string> = {
   CREATED: 'Cobrança criada',
@@ -50,6 +54,7 @@ function detalheDoRegistro(acao: string, dados: Prisma.JsonValue | null): string
     }`;
   }
   if (acao === 'orders.email_resent' && typeof d.to === 'string') return `Enviado para ${d.to}`;
+  if (acao === 'orders.whatsapp_shared' && typeof d.to === 'string') return `Para ${formatPhoneBR(d.to)}`;
   if (acao === 'payments.reconciled' && typeof d.status === 'string' && d.status in PAYMENT_STATUS_LABELS) {
     return `Situação no provedor: ${PAYMENT_STATUS_LABELS[d.status as PaymentStatusKey].toLowerCase()}`;
   }
@@ -93,26 +98,25 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   return (
     <div className="grid gap-6">
       <Link
-        href="/admin/pedidos"
+        href="/admin/vendas"
         className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-ink-800"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Pedidos
+        Vendas
       </Link>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-pool-700">Pedido</p>
+          <p className="text-[13px] font-semibold text-pool-700">Venda</p>
           <h1 className="font-mono text-[26px] font-semibold tracking-tight text-ink-900 sm:text-[30px]">
             {pedido.code}
           </h1>
           <p className="mt-1 text-sm text-ink-500">
-            Criado em {formatDateTimeBR(pedido.createdAt, fuso)}
-            {pedido.soldByName ? ` por ${pedido.soldByName}` : ''}
+            Compra em {formatDateTimeBR(pedido.createdAt, fuso)}
+            {pedido.soldByName ? ` · vendida por ${pedido.soldByName}` : ''}
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <OrderStatusBadge status={pedido.status} />
-            <FinancialStatusBadge status={pedido.financialStatus} />
+            <SaleStatusBadge status={pedido.saleStatus} />
             <ChannelBadge channel={pedido.channel} />
             {pedido.coupon ? <Badge tone="grape">Cupom {pedido.coupon.code}</Badge> : null}
           </div>
@@ -123,6 +127,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
           totalLabel={formatBRL(pedido.totalCents)}
           publicUrl={pedido.publicUrl}
           reconcilePaymentId={pagamentoEmAberto?.id ?? null}
+          manualPayment={pedido.manualPayment}
           actions={pedido.actions}
         />
       </div>
@@ -262,7 +267,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
                             <span className="tabular">{formatBRL(pagamento.amountCents)}</span>
                           </p>
                           <p className="text-[13px] text-ink-500">
-                            {pagamento.provider === 'MOCK' ? 'Provedor de teste' : 'Asaas'} · criado em{' '}
+                            {PAYMENT_PROVIDER_LABELS[pagamento.provider]} · registrado em{' '}
                             {formatDateTimeBR(pagamento.createdAt, fuso)}
                           </p>
                         </div>
@@ -321,7 +326,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
         <div className="grid gap-6">
           <Card>
             <CardHeader
-              title="Comprador"
+              title="Cliente"
               action={
                 pedido.customer && can(auth, 'customers.view') ? (
                   <Link

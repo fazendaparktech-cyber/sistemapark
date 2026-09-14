@@ -134,7 +134,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
             ? `, somando ${formatBRL(painel.refundsDue.amountCents)}`
             : ''}
           .{' '}
-          <Link href="/admin/pedidos?financeiro=PAID&situacao=EXPIRED" className="font-semibold underline">
+          <Link href="/admin/vendas?financeiro=PAID&situacao=CANCELLED" className="font-semibold underline">
             Ver pedidos
           </Link>
         </Alert>
@@ -314,7 +314,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
                 </p>
               </div>
               {can(auth, 'orders.view') && painel.pending.orders > 0 ? (
-                <Link href="/admin/pedidos?situacao=PENDING_PAYMENT" className={LINK}>
+                <Link href="/admin/vendas?situacao=PENDING" className={LINK}>
                   Ver pedidos
                 </Link>
               ) : null}
@@ -542,7 +542,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
             <h2 id="ultimos-pedidos" className="font-display text-[17px] font-semibold text-ink-900">
               Últimos pedidos
             </h2>
-            <Link href="/admin/pedidos" className={LINK}>
+            <Link href="/admin/vendas" className={LINK}>
               Ver todos
             </Link>
           </div>
@@ -568,7 +568,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
                     <TR key={pedido.id} className="hover:bg-pool-50/40">
                       <TD className="whitespace-nowrap">
                         <Link
-                          href={`/admin/pedidos/${pedido.id}`}
+                          href={`/admin/vendas/${pedido.id}`}
                           className="font-mono text-[13px] font-semibold text-ink-900 hover:text-pool-800"
                         >
                           {pedido.code}

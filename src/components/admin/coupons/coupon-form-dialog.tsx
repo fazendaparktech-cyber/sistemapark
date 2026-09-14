@@ -447,8 +447,8 @@ export function CouponFormDialog({
               <div className="flex flex-wrap gap-4">
                 {(
                   [
-                    ['ONLINE', 'Site'],
-                    ['POS', 'Bilheteria'],
+                    ['ONLINE', 'Online'],
+                    ['POS', 'Presencial'],
                   ] as const
                 ).map(([canal, rotulo]) => (
                   <label

@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleCheck, CircleX, Ellipsis, Link2, Mail, RefreshCw, Undo2 } from 'lucide-react';
+import { CircleCheck, CircleX, Ellipsis, Link2, Mail, MessageCircle, RefreshCw, Undo2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DropdownMenu } from 'radix-ui';
 import { useState, type FormEvent } from 'react';
@@ -18,6 +18,7 @@ interface Acoes {
   canCancel: boolean;
   canRefund: boolean;
   canResend: boolean;
+  canShareWhatsapp: boolean;
   canRegenerateLink: boolean;
   canReconcile: boolean;
   canSimulatePayment: boolean;
@@ -34,6 +35,7 @@ export function OrderActions({
   totalLabel,
   publicUrl,
   reconcilePaymentId,
+  manualPayment,
   actions,
 }: {
   orderId: string;
@@ -41,6 +43,8 @@ export function OrderActions({
   totalLabel: string;
   publicUrl: string | null;
   reconcilePaymentId: string | null;
+  /** Pago em dinheiro ou maquininha: a devolução é feita pela equipe. */
+  manualPayment: boolean;
   actions: Acoes;
 }) {
   const router = useRouter();
@@ -53,10 +57,7 @@ export function OrderActions({
   const [ocupado, setOcupado] = useState(false);
 
   const temMaisAcoes =
-    actions.canResend ||
-    actions.canRegenerateLink ||
-    (actions.canReconcile && reconcilePaymentId) ||
-    actions.canSimulatePayment;
+    actions.canRegenerateLink || (actions.canReconcile && reconcilePaymentId) || actions.canSimulatePayment;
 
   function abrir(nova: Janela) {
     setMotivo('');
@@ -113,6 +114,23 @@ export function OrderActions({
     }
   }
 
+  async function enviarWhatsapp() {
+    // A janela abre no clique (senão o navegador bloqueia) e recebe o link depois.
+    const janela = window.open('', '_blank');
+    setOcupado(true);
+    try {
+      const { url } = await api<{ url: string }>(`/api/admin/orders/${orderId}/whatsapp`, { method: 'POST' });
+      if (janela) janela.location.href = url;
+      else window.location.href = url;
+      router.refresh();
+    } catch (falha) {
+      janela?.close();
+      toast.error(errorMessage(falha));
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function gerarNovoLink() {
     setEnviando(true);
     setErro(null);
@@ -133,7 +151,28 @@ export function OrderActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {publicUrl ? <CopyButton value={publicUrl} label="Copiar link do cliente" /> : null}
+        {actions.canShareWhatsapp ? (
+          <Button variant="secondary" onClick={enviarWhatsapp} disabled={ocupado}>
+            <MessageCircle className="size-4" aria-hidden />
+            Enviar pelo WhatsApp
+          </Button>
+        ) : null}
+        {actions.canResend ? (
+          <Button
+            variant="secondary"
+            disabled={ocupado}
+            onClick={() =>
+              void executar(
+                () => api(`/api/admin/orders/${orderId}/resend`, { method: 'POST' }),
+                'E-mail reenviado ao cliente.',
+              )
+            }
+          >
+            <Mail className="size-4" aria-hidden />
+            Reenviar e-mail
+          </Button>
+        ) : null}
+        {publicUrl ? <CopyButton value={publicUrl} label="Copiar link dos ingressos" /> : null}
         {actions.canRefund ? (
           <Button variant="danger-soft" onClick={() => abrir('reembolsar')}>
             <Undo2 className="size-4" aria-hidden />
@@ -159,20 +198,6 @@ export function OrderActions({
                 sideOffset={8}
                 className="z-50 min-w-64 rounded-xl bg-white p-1.5 shadow-pop ring-1 ring-ink-200 data-[state=open]:animate-rise-in"
               >
-                {actions.canResend ? (
-                  <DropdownMenu.Item
-                    className={ITEM}
-                    onSelect={() =>
-                      void executar(
-                        () => api(`/api/admin/orders/${orderId}/resend`, { method: 'POST' }),
-                        'E-mail reenviado ao comprador.',
-                      )
-                    }
-                  >
-                    <Mail className="size-4 text-ink-500" aria-hidden />
-                    Reenviar e-mail do pedido
-                  </DropdownMenu.Item>
-                ) : null}
                 {actions.canRegenerateLink ? (
                   <DropdownMenu.Item className={ITEM} onSelect={() => abrir('novo-link')}>
                     <Link2 className="size-4 text-ink-500" aria-hidden />
@@ -244,7 +269,9 @@ export function OrderActions({
           title={reembolso ? `Reembolsar o pedido ${code}` : `Cancelar o pedido ${code}`}
           description={
             reembolso
-              ? `O valor de ${totalLabel} volta para o cliente pelo mesmo meio de pagamento, os ingressos deixam de valer e o cliente recebe um e-mail.`
+              ? manualPayment
+                ? `Devolva ${totalLabel} ao cliente no balcão. Os ingressos deixam de valer e a devolução fica registrada no histórico da venda.`
+                : `O valor de ${totalLabel} volta para o cliente pelo mesmo meio de pagamento, os ingressos deixam de valer e o cliente recebe um e-mail.`
               : 'Os ingressos deixam de valer, as vagas voltam para venda e o cliente recebe um e-mail.'
           }
           size="sm"

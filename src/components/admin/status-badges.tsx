@@ -5,17 +5,34 @@ import {
   ORDER_CHANNEL_LABELS,
   ORDER_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
+  SALE_STATUS_LABELS,
   TICKET_STATUS_LABELS,
   type FinancialStatusKey,
   type OrderChannelKey,
   type OrderStatusKey,
   type PaymentStatusKey,
+  type SaleStatusKey,
   type TicketStatusKey,
 } from '@/lib/orders';
 
 import { Badge, type BadgeTone } from '../ui/badge';
 
 /** A mesma situação sempre com a mesma cor, em qualquer tela do painel. */
+
+const TOM_DA_VENDA: Record<SaleStatusKey, BadgeTone> = {
+  PAID: 'success',
+  PENDING: 'warning',
+  CANCELLED: 'danger',
+  REFUNDED: 'grape',
+};
+
+export function SaleStatusBadge({ status }: { status: SaleStatusKey }) {
+  return (
+    <Badge tone={TOM_DA_VENDA[status]} dot>
+      {SALE_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
 
 const TOM_DO_PEDIDO: Record<OrderStatusKey, BadgeTone> = {
   PENDING_PAYMENT: 'warning',

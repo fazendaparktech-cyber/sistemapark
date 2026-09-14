@@ -37,7 +37,7 @@ export const ADMIN_NAV: readonly AdminNavSection[] = [
   {
     label: 'Vendas',
     items: [
-      { href: '/admin/pedidos', label: 'Pedidos', icon: 'orders', permission: 'orders.view' },
+      { href: '/admin/vendas', label: 'Vendas', icon: 'orders', permission: 'orders.view' },
       { href: '/admin/clientes', label: 'Clientes', icon: 'customers', permission: 'customers.view' },
       { href: '/admin/cupons', label: 'Cupons', icon: 'coupons', permission: 'coupons.view' },
     ],

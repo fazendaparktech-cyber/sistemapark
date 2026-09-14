@@ -23,8 +23,9 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'orders.paid_after_cancel': 'Pagamento recebido depois do cancelamento',
   'orders.late_payment_conflict': 'Pagamento fora do prazo sem vaga disponível',
   'orders.email_resent': 'Reenviou o e-mail do pedido',
+  'orders.whatsapp_shared': 'Enviou os ingressos pelo WhatsApp',
   'orders.link_regenerated': 'Gerou novo link do pedido',
-  'orders.exported': 'Exportou planilha de pedidos',
+  'orders.exported': 'Exportou planilha de vendas',
   'payments.reconciled': 'Consultou pagamento no provedor',
   'payments.amount_mismatch': 'Valor pago diferente do cobrado',
   'customers.updated': 'Alterou cadastro de cliente',
@@ -58,7 +59,7 @@ export const AUDIT_REASON_LABELS: Readonly<Record<string, string>> = {
 
 export const AUDIT_ACTION_GROUPS = [
   { value: 'auth.', label: 'Acesso ao sistema' },
-  { value: 'orders.', label: 'Pedidos' },
+  { value: 'orders.', label: 'Vendas' },
   { value: 'payments.', label: 'Pagamentos' },
   { value: 'customers.', label: 'Clientes' },
   { value: 'coupons.', label: 'Cupons' },

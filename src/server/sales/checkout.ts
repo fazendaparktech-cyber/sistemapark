@@ -62,7 +62,7 @@ async function resultadoDoPedido(db: DbClient, orderId: string): Promise<Checkou
   };
 }
 
-interface LinhaDoPedido {
+export interface OrderLine {
   tipo: SellableTicketType;
   quantidade: number;
   /** Ingressos (pessoas) gerados pela linha. */
@@ -87,11 +87,15 @@ function faixaEtaria(tipo: SellableTicketType): string {
   return `${tipo.name}: para visitantes a partir de ${tipo.minAge ?? 0} anos na data da visita`;
 }
 
-/** Dados de cada visitante conforme o que o tipo de ingresso pede. Erros voltam por campo. */
-function conferirVisitantes(
-  linhas: readonly LinhaDoPedido[],
+/**
+ * Dados de cada visitante conforme o que o tipo de ingresso pede. Erros voltam por campo.
+ * Com `required: false` (balcão), visitante sem nome fica sem dados; o que for informado é conferido.
+ */
+export function validateHolders(
+  linhas: readonly OrderLine[],
   recebidos: readonly VisitanteRecebido[],
   dataDaVisita: DateOnly,
+  opcoes: { required: boolean },
 ): Map<string, Visitante[]> {
   const campos: Record<string, string> = {};
   const porTipo = new Map<string, Visitante[]>();
@@ -104,11 +108,11 @@ function conferirVisitantes(
     const lista: Visitante[] = [];
 
     for (let n = 0; n < linha.ingressos; n++) {
-      if (!pede.name) {
+      const entrada = doTipo[n];
+      if (!pede.name || (!opcoes.required && !entrada?.visitante.name?.trim())) {
         lista.push({ name: null, birthDate: null, cpfDigits: null });
         continue;
       }
-      const entrada = doTipo[n];
       const caminho = entrada ? `holders.${entrada.indice}` : `holders.${linha.tipo.id}.${n}`;
       const nome = entrada?.visitante.name?.trim().replace(/\s+/g, ' ') ?? '';
       if (nome.length < 3) campos[`${caminho}.name`] = 'Informe o nome completo do visitante';
@@ -117,13 +121,15 @@ function conferirVisitantes(
       if (pede.cpf) {
         const digitos = onlyDigits(entrada?.visitante.cpf ?? '');
         if (isValidCpf(digitos)) cpf = digitos;
-        else campos[`${caminho}.cpf`] = 'CPF inválido';
+        else if (opcoes.required || digitos) campos[`${caminho}.cpf`] = 'CPF inválido';
       }
 
       let nascimento: DateOnly | null = null;
       if (pede.birthDate) {
         const informado = entrada?.visitante.birthDate ?? '';
-        if (!isDateOnly(informado) || compareDateOnly(informado, dataDaVisita) > 0) {
+        if (!opcoes.required && !informado) {
+          // Nascimento não informado no balcão: fica em branco.
+        } else if (!isDateOnly(informado) || compareDateOnly(informado, dataDaVisita) > 0) {
           campos[`${caminho}.birthDate`] = 'Data de nascimento inválida';
         } else {
           nascimento = informado;
@@ -147,7 +153,7 @@ function conferirVisitantes(
   return porTipo;
 }
 
-function codigosDeIngresso(quantidade: number, usados: Set<string>): string[] {
+export function newTicketCodes(quantidade: number, usados: Set<string>): string[] {
   const codigos: string[] = [];
   while (codigos.length < quantidade) {
     const codigo = randomCrockford(10);
@@ -245,7 +251,7 @@ export async function placeOnlineOrder(
           quantities: new Map(itens.map((item) => [item.ticketTypeId, item.quantity])),
         });
         const porId = new Map(tipos.map((tipo) => [tipo.id, tipo]));
-        const linhas: LinhaDoPedido[] = [...itens]
+        const linhas: OrderLine[] = [...itens]
           .sort((a, b) => a.ticketType.sortOrder - b.ticketType.sortOrder)
           .map((item) => {
             const tipo = porId.get(item.ticketTypeId);
@@ -263,7 +269,7 @@ export async function placeOnlineOrder(
             };
           });
 
-        const visitantes = conferirVisitantes(linhas, dados.holders, dia.date);
+        const visitantes = validateHolders(linhas, dados.holders, dia.date, { required: true });
 
         const pessoas = linhas.reduce(
           (soma, linha) => soma + (linha.tipo.occupiesCapacity ? linha.ingressos : 0),
@@ -397,7 +403,7 @@ export async function placeOnlineOrder(
           );
           const pessoasDaLinha = visitantes.get(linha.tipo.id) ?? [];
           const criados = await tx.ticket.createManyAndReturn({
-            data: codigosDeIngresso(linha.ingressos, usados).map((code, n) => {
+            data: newTicketCodes(linha.ingressos, usados).map((code, n) => {
               const visitante = pessoasDaLinha[n];
               return {
                 parkId: park.id,

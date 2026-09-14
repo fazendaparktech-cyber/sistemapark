@@ -192,7 +192,7 @@ export default async function CupomPage({ params }: { params: Promise<{ id: stri
               <Regra
                 rotulo="Onde vale"
                 valor={cupom.channels
-                  .map((canal) => (canal === 'ONLINE' ? 'Site' : 'Bilheteria'))
+                  .map((canal) => (canal === 'ONLINE' ? 'Online' : 'Presencial'))
                   .join(' e ')}
               />
               <Regra
@@ -233,7 +233,7 @@ export default async function CupomPage({ params }: { params: Promise<{ id: stri
                       <TD className="max-w-56">
                         {can(auth, 'orders.view') ? (
                           <Link
-                            href={`/admin/pedidos/${uso.orderId}`}
+                            href={`/admin/vendas/${uso.orderId}`}
                             className="font-mono text-[13px] font-semibold text-ink-900 hover:text-pool-800"
                           >
                             {uso.orderCode}

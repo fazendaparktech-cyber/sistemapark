@@ -164,7 +164,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
                       <TD className="whitespace-nowrap">
                         {verPedidos ? (
                           <Link
-                            href={`/admin/pedidos/${pedido.id}`}
+                            href={`/admin/vendas/${pedido.id}`}
                             className="font-mono text-[13px] font-semibold text-ink-900 hover:text-pool-800"
                           >
                             {pedido.code}

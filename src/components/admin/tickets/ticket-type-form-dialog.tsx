@@ -439,8 +439,8 @@ export function TicketTypeFormDialog({ ticketType }: { ticketType?: TicketTypeFo
             <div className="flex flex-wrap gap-5">
               {(
                 [
-                  ['ONLINE', 'Site'],
-                  ['POS', 'Bilheteria'],
+                  ['ONLINE', 'Online'],
+                  ['POS', 'Presencial'],
                 ] as const
               ).map(([canal, rotulo]) => (
                 <label key={canal} className="flex cursor-pointer items-center gap-2.5 text-sm text-ink-800">

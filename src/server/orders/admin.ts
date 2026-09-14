@@ -14,17 +14,22 @@ import {
 import { formatPhoneBR, isValidCpf, onlyDigits } from '@/lib/documents';
 import {
   effectiveOrderStatus,
-  FINANCIAL_STATUS_LABELS,
   normalizeOrderCode,
   ORDER_CHANNEL_LABELS,
   ORDER_STATUS_LABELS,
   orderReasonSchema,
+  PAYMENT_GROUP_METHODS,
+  PAYMENT_METHOD_LABELS,
+  SALE_STATUS_LABELS,
+  saleStatusOf,
   type FinancialStatusKey,
   type OrderChannelKey,
   type OrderReasonInput,
   type OrderStatusKey,
+  type PaymentGroupKey,
   type PaymentMethodKey,
   type PaymentStatusKey,
+  type SaleStatusKey,
   type TicketStatusKey,
 } from '@/lib/orders';
 
@@ -45,12 +50,13 @@ import {
   sendOrderConfirmedEmail,
   sendOrderReceivedEmail,
 } from './emails';
+import { orderWhatsappUrl } from './whatsapp';
 
 /**
- * Pedidos no painel: busca, ficha completa com linha do tempo e as ações de
- * atendimento (cancelar, reembolsar, reenviar, gerar novo link, consultar
- * pagamento). Toda ação exige motivo quando mexe em dinheiro ou ingresso, e
- * fica na auditoria.
+ * Vendas no painel: busca, ficha completa com linha do tempo e as ações de
+ * atendimento (cancelar, reembolsar, reenviar por e-mail ou WhatsApp, gerar
+ * novo link, consultar pagamento). Toda ação exige motivo quando mexe em
+ * dinheiro ou ingresso, e fica na auditoria.
  */
 
 export const ORDERS_PAGE_SIZE = 25;
@@ -58,8 +64,9 @@ const LIMITE_EXPORTACAO = 50_000;
 
 export interface OrderListFilters {
   q?: string;
-  status?: OrderStatusKey;
+  status?: SaleStatusKey;
   channel?: OrderChannelKey;
+  payment?: PaymentGroupKey;
   financial?: FinancialStatusKey;
   visitFrom?: DateOnly;
   visitTo?: DateOnly;
@@ -72,11 +79,31 @@ function filtrosDoPedido(auth: AuthContext, filtros: OrderListFilters, agora: Da
   const e: Prisma.OrderWhereInput[] = [{ parkId: auth.park.id }];
   const fuso = auth.park.timezone;
 
-  if (filtros.status === 'PENDING_PAYMENT') e.push({ status: 'PENDING_PAYMENT', expiresAt: { gt: agora } });
-  else if (filtros.status === 'EXPIRED') {
-    e.push({ OR: [{ status: 'EXPIRED' }, { status: 'PENDING_PAYMENT', expiresAt: { lte: agora } }] });
-  } else if (filtros.status) e.push({ status: filtros.status });
+  const reembolsos: FinancialStatusKey[] = ['REFUNDED', 'PARTIALLY_REFUNDED'];
+  if (filtros.status === 'PAID') e.push({ status: 'CONFIRMED', financialStatus: { notIn: reembolsos } });
+  else if (filtros.status === 'PENDING') e.push({ status: 'PENDING_PAYMENT', expiresAt: { gt: agora } });
+  else if (filtros.status === 'CANCELLED') {
+    e.push(
+      { financialStatus: { notIn: reembolsos } },
+      {
+        OR: [
+          { status: { in: ['CANCELLED', 'EXPIRED'] } },
+          { status: 'PENDING_PAYMENT', expiresAt: { lte: agora } },
+        ],
+      },
+    );
+  } else if (filtros.status === 'REFUNDED') e.push({ financialStatus: { in: reembolsos } });
   if (filtros.channel) e.push({ channel: filtros.channel });
+  if (filtros.payment) {
+    e.push({
+      payments: {
+        some: {
+          method: { in: [...PAYMENT_GROUP_METHODS[filtros.payment]] },
+          status: { in: ['AWAITING', 'PROCESSING', 'APPROVED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
+        },
+      },
+    });
+  }
   if (filtros.financial) e.push({ financialStatus: filtros.financial });
   if (filtros.visitFrom) e.push({ visitDate: { gte: dateOnlyToDb(filtros.visitFrom) } });
   if (filtros.visitTo) e.push({ visitDate: { lte: dateOnlyToDb(filtros.visitTo) } });
@@ -119,8 +146,10 @@ export interface AdminOrderListItem {
   buyerName: string;
   buyerEmail: string | null;
   status: OrderStatusKey;
+  saleStatus: SaleStatusKey;
   financialStatus: FinancialStatusKey;
   channel: OrderChannelKey;
+  paymentMethod: PaymentMethodKey | null;
   visitDate: DateOnly;
   ticketsCount: number;
   totalCents: number;
@@ -148,10 +177,25 @@ const SELECAO_DA_LISTA = {
   confirmedAt: true,
   utmSource: true,
   coupon: { select: { code: true } },
+  payments: { select: { method: true, status: true }, orderBy: { createdAt: 'desc' } },
   _count: { select: { tickets: true } },
 } satisfies Prisma.OrderSelect;
 
 type PedidoDaLista = Prisma.OrderGetPayload<{ select: typeof SELECAO_DA_LISTA }>;
+
+const PAGAMENTO_EFETIVADO: readonly PaymentStatusKey[] = [
+  'APPROVED',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+  'CHARGEBACK',
+];
+
+/** Forma de pagamento da venda: a do pagamento que entrou; sem ele, a da última cobrança. */
+function formaDePagamento(
+  pagamentos: readonly { method: PaymentMethodKey; status: PaymentStatusKey }[],
+): PaymentMethodKey | null {
+  return (pagamentos.find((p) => PAGAMENTO_EFETIVADO.includes(p.status)) ?? pagamentos[0])?.method ?? null;
+}
 
 function paraItemDaLista(pedido: PedidoDaLista, agora: Date): AdminOrderListItem {
   return {
@@ -160,8 +204,10 @@ function paraItemDaLista(pedido: PedidoDaLista, agora: Date): AdminOrderListItem
     buyerName: pedido.buyerName,
     buyerEmail: pedido.buyerEmail,
     status: effectiveOrderStatus(pedido, agora),
+    saleStatus: saleStatusOf(pedido, agora),
     financialStatus: pedido.financialStatus,
     channel: pedido.channel,
+    paymentMethod: formaDePagamento(pedido.payments),
     visitDate: dbToDateOnly(pedido.visitDate),
     ticketsCount: pedido._count.tickets,
     totalCents: pedido.totalCents,
@@ -222,6 +268,9 @@ export interface AdminOrderDetail {
   id: string;
   code: string;
   status: OrderStatusKey;
+  saleStatus: SaleStatusKey;
+  /** Pagamento recebido pela equipe (dinheiro ou maquininha): o reembolso é devolvido no balcão. */
+  manualPayment: boolean;
   financialStatus: FinancialStatusKey;
   channel: OrderChannelKey;
   visitDate: DateOnly;
@@ -304,6 +353,7 @@ export interface AdminOrderDetail {
     canCancel: boolean;
     canRefund: boolean;
     canResend: boolean;
+    canShareWhatsapp: boolean;
     canRegenerateLink: boolean;
     canReconcile: boolean;
     canSimulatePayment: boolean;
@@ -362,14 +412,18 @@ export async function getOrderAdmin(
   const status = effectiveOrderStatus(pedido, agora);
   const pendente = status === 'PENDING_PAYMENT';
   const usados = pedido.tickets.some((ingresso) => ingresso.status === 'CHECKED_IN');
-  const aprovado = pedido.payments.some(
-    (pagamento) => pagamento.status === 'APPROVED' && pagamento.providerPaymentId,
+  const aprovados = pedido.payments.filter(
+    (pagamento) =>
+      pagamento.status === 'APPROVED' && (pagamento.providerPaymentId || pagamento.provider === 'MANUAL'),
   );
+  const podeReenviar = can(auth, 'orders.resend') && (pendente || pedido.status === 'CONFIRMED');
 
   return {
     id: pedido.id,
     code: pedido.code,
     status,
+    saleStatus: saleStatusOf(pedido, agora),
+    manualPayment: aprovados.some((pagamento) => pagamento.provider === 'MANUAL'),
     financialStatus: pedido.financialStatus,
     channel: pedido.channel,
     visitDate: dbToDateOnly(pedido.visitDate),
@@ -467,8 +521,10 @@ export async function getOrderAdmin(
         can(auth, 'orders.cancel') &&
         !usados &&
         (pendente || (pedido.status === 'CONFIRMED' && pedido.financialStatus === 'NOT_APPLICABLE')),
-      canRefund: can(auth, 'refunds.approve') && !usados && pedido.financialStatus === 'PAID' && aprovado,
-      canResend: can(auth, 'orders.resend') && (pendente || pedido.status === 'CONFIRMED'),
+      canRefund:
+        can(auth, 'refunds.approve') && !usados && pedido.financialStatus === 'PAID' && aprovados.length > 0,
+      canResend: podeReenviar && pedido.buyerEmail !== null,
+      canShareWhatsapp: podeReenviar && pedido.buyerPhone !== null,
       canRegenerateLink: can(auth, 'tickets.manage'),
       canReconcile:
         can(auth, 'finance.view') &&
@@ -634,10 +690,14 @@ export async function refundOrder(
       }
 
       const aprovados = await tx.payment.findMany({
-        where: { orderId, status: 'APPROVED', providerPaymentId: { not: null } },
+        where: {
+          orderId,
+          status: 'APPROVED',
+          OR: [{ providerPaymentId: { not: null } }, { provider: 'MANUAL' }],
+        },
       });
       const pagamento = aprovados[0];
-      if (!pagamento?.providerPaymentId) {
+      if (!pagamento) {
         throw new AppError('CONFLICT', 'Não há pagamento aprovado para reembolsar neste pedido.');
       }
       if (aprovados.length > 1) {
@@ -648,11 +708,18 @@ export async function refundOrder(
       }
       await tx.$queryRaw`SELECT id FROM payments WHERE id = ${pagamento.id}::uuid FOR UPDATE`;
 
-      const situacao = await gatewayFor(pagamento.provider).refundCharge(
-        pagamento.providerPaymentId,
-        pagamento.amountCents,
-      );
-      const devolvido = situacao.refundedCents || pagamento.amountCents;
+      // Recebido no balcão: a equipe devolve o dinheiro na hora, sem provedor.
+      let devolvido = pagamento.amountCents;
+      if (pagamento.provider !== 'MANUAL') {
+        if (!pagamento.providerPaymentId) {
+          throw new AppError('CONFLICT', 'Não há pagamento aprovado para reembolsar neste pedido.');
+        }
+        const situacao = await gatewayFor(pagamento.provider).refundCharge(
+          pagamento.providerPaymentId,
+          pagamento.amountCents,
+        );
+        devolvido = situacao.refundedCents || pagamento.amountCents;
+      }
 
       await tx.payment.update({
         where: { id: pagamento.id },
@@ -666,7 +733,7 @@ export async function refundOrder(
           toStatus: 'REFUNDED',
           amountCents: devolvido,
           providerReference: pagamento.providerPaymentId,
-          data: { reason: motivo, userId: auth.user.id },
+          data: { reason: motivo, userId: auth.user.id, manual: pagamento.provider === 'MANUAL' },
         },
       });
 
@@ -739,7 +806,10 @@ export async function resendOrderEmail(
   });
   if (!pedido) throw Errors.notFound('Pedido não encontrado.');
   if (!pedido.buyerEmail) {
-    throw new AppError('CONFLICT', 'Este pedido não tem e-mail cadastrado. Envie os ingressos pelo WhatsApp.');
+    throw new AppError(
+      'CONFLICT',
+      'Este pedido não tem e-mail cadastrado. Envie os ingressos pelo WhatsApp.',
+    );
   }
   await enforceRateLimit({ key: rateLimitKey('reenvio-pedido', orderId), limit: 5, windowSeconds: 3600 }, db);
 
@@ -778,6 +848,76 @@ export async function resendOrderEmail(
     data: { code: pedido.code, to: pedido.buyerEmail },
     meta,
   });
+}
+
+/**
+ * Link do WhatsApp com a mensagem pronta e o link dos ingressos, para a equipe
+ * enviar da própria conta do parque. Fica registrado no histórico do pedido.
+ */
+export async function shareOrderWhatsapp(
+  auth: AuthContext,
+  orderId: string,
+  meta: RequestMeta,
+  db: PrismaClient = prisma,
+): Promise<{ url: string }> {
+  requirePermission(auth, 'orders.resend');
+  const pedido = await db.order.findFirst({
+    where: { id: orderId, parkId: auth.park.id },
+    select: {
+      id: true,
+      code: true,
+      status: true,
+      expiresAt: true,
+      accessVersion: true,
+      buyerName: true,
+      buyerPhone: true,
+      visitDate: true,
+    },
+  });
+  if (!pedido) throw Errors.notFound('Pedido não encontrado.');
+  if (!pedido.buyerPhone) throw new AppError('CONFLICT', 'Este pedido não tem celular cadastrado.');
+  const status = effectiveOrderStatus(pedido);
+  if (status !== 'CONFIRMED' && status !== 'PENDING_PAYMENT') {
+    throw new AppError(
+      'CONFLICT',
+      `Um pedido ${ORDER_STATUS_LABELS[status].toLowerCase()} não tem ingressos para enviar.`,
+    );
+  }
+
+  const url = orderWhatsappUrl({
+    phone: pedido.buyerPhone,
+    parkName: auth.park.name,
+    buyerName: pedido.buyerName,
+    code: pedido.code,
+    visitDate: dbToDateOnly(pedido.visitDate),
+    publicUrl: orderPublicUrl(pedido),
+    pending: status === 'PENDING_PAYMENT',
+  });
+
+  if (status === 'CONFIRMED') {
+    const ingressos = await db.ticket.findMany({
+      where: { orderId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    await db.ticketEvent.createMany({
+      data: ingressos.map((ingresso) => ({
+        ticketId: ingresso.id,
+        type: 'RESENT' as const,
+        actorUserId: auth.user.id,
+        data: { channel: 'whatsapp' },
+      })),
+    });
+  }
+  await recordAudit(db, {
+    action: 'orders.whatsapp_shared',
+    parkId: auth.park.id,
+    actorUserId: auth.user.id,
+    entityType: 'order',
+    entityId: orderId,
+    data: { code: pedido.code, to: pedido.buyerPhone },
+    meta,
+  });
+  return { url };
 }
 
 /** Invalida o link antigo do pedido (ex.: foi compartilhado por engano) e devolve o novo. */
@@ -830,7 +970,7 @@ export async function simulateOrderPayment(
   return getOrderAdmin(auth, orderId, db);
 }
 
-/** Planilha de pedidos com os filtros da tela. Contém dado pessoal: fica na auditoria. */
+/** Planilha de vendas com os filtros da tela. Contém dado pessoal: fica na auditoria. */
 export async function exportOrdersCsv(
   auth: AuthContext,
   filtros: Omit<OrderListFilters, 'page'>,
@@ -852,9 +992,9 @@ export async function exportOrdersCsv(
       'Data da compra',
       'Data da visita',
       'Situação',
-      'Financeiro',
       'Canal',
-      'Comprador',
+      'Forma de pagamento',
+      'Cliente',
       'E-mail',
       'Celular',
       'Ingressos',
@@ -864,23 +1004,26 @@ export async function exportOrdersCsv(
       'Cupom',
       'Origem',
     ],
-    pedidos.map((pedido) => [
-      pedido.code,
-      formatDateTimeBR(pedido.createdAt, fuso),
-      formatDateBR(dbToDateOnly(pedido.visitDate)),
-      ORDER_STATUS_LABELS[effectiveOrderStatus(pedido, agora)],
-      FINANCIAL_STATUS_LABELS[pedido.financialStatus],
-      ORDER_CHANNEL_LABELS[pedido.channel],
-      pedido.buyerName,
-      pedido.buyerEmail,
-      pedido.buyerPhone ? formatPhoneBR(pedido.buyerPhone) : null,
-      pedido._count.tickets,
-      centsToCsv(pedido.subtotalCents),
-      centsToCsv(pedido.discountCents),
-      centsToCsv(pedido.totalCents),
-      pedido.coupon?.code ?? null,
-      pedido.utmSource,
-    ]),
+    pedidos.map((pedido) => {
+      const forma = formaDePagamento(pedido.payments);
+      return [
+        pedido.code,
+        formatDateTimeBR(pedido.createdAt, fuso),
+        formatDateBR(dbToDateOnly(pedido.visitDate)),
+        SALE_STATUS_LABELS[saleStatusOf(pedido, agora)],
+        ORDER_CHANNEL_LABELS[pedido.channel],
+        forma ? PAYMENT_METHOD_LABELS[forma] : null,
+        pedido.buyerName,
+        pedido.buyerEmail,
+        pedido.buyerPhone ? formatPhoneBR(pedido.buyerPhone) : null,
+        pedido._count.tickets,
+        centsToCsv(pedido.subtotalCents),
+        centsToCsv(pedido.discountCents),
+        centsToCsv(pedido.totalCents),
+        pedido.coupon?.code ?? null,
+        pedido.utmSource,
+      ];
+    }),
   );
   await recordAudit(db, {
     action: 'orders.exported',
@@ -890,5 +1033,5 @@ export async function exportOrdersCsv(
     data: { rows: pedidos.length, filters: { ...filtros } },
     meta,
   });
-  return { filename: `pedidos-${todayIn(fuso)}.csv`, content };
+  return { filename: `vendas-${todayIn(fuso)}.csv`, content };
 }

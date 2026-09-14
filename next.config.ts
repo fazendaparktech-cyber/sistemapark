@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   // Sem o selo do Next.js sobre a interface durante o desenvolvimento.
   devIndicators: false,
+  async redirects() {
+    return [
+      // Endereços antigos do painel (links salvos e e-mails internos).
+      { source: '/admin/pedidos', destination: '/admin/vendas', permanent: true },
+      { source: '/admin/pedidos/:id', destination: '/admin/vendas/:id', permanent: true },
+    ];
+  },
   async headers() {
     return [
       { source: '/:path*', headers: cabecalhosDeSeguranca },

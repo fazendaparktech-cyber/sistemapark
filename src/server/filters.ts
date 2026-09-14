@@ -2,7 +2,7 @@ import 'server-only';
 
 import { CUSTOMER_SORTS } from '@/lib/customers';
 import { isDateOnly, type DateOnly } from '@/lib/dates';
-import { FINANCIAL_STATUSES, ORDER_CHANNELS, ORDER_STATUSES } from '@/lib/orders';
+import { FINANCIAL_STATUSES, ORDER_CHANNELS, PAYMENT_GROUPS, SALE_STATUSES } from '@/lib/orders';
 
 import type { CustomerListFilters } from './customers/service';
 import type { OrderListFilters } from './orders/admin';
@@ -37,8 +37,9 @@ export function pageParam(valor: string | string[] | undefined): number {
 export function parseOrderFilters(parametros: SearchParamsRecord): OrderListFilters {
   return {
     q: texto(parametros.q),
-    status: umDe(ORDER_STATUSES, texto(parametros.situacao)),
+    status: umDe(SALE_STATUSES, texto(parametros.situacao)),
     channel: umDe(ORDER_CHANNELS, texto(parametros.canal)),
+    payment: umDe(PAYMENT_GROUPS, texto(parametros.pagamento)),
     financial: umDe(FINANCIAL_STATUSES, texto(parametros.financeiro)),
     visitFrom: data(parametros.visitaDe),
     visitTo: data(parametros.visitaAte),

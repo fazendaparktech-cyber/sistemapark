@@ -67,8 +67,8 @@ export const SALES_CHANNELS = ['ONLINE', 'POS'] as const;
 export type SalesChannelKey = (typeof SALES_CHANNELS)[number];
 
 export const SALES_CHANNEL_LABELS: Readonly<Record<SalesChannelKey, string>> = {
-  ONLINE: 'Site',
-  POS: 'Bilheteria',
+  ONLINE: 'Online',
+  POS: 'Presencial',
 };
 
 function semRepetir<T>(lista: readonly T[]): T[] {

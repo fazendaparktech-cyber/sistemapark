@@ -1,5 +1,7 @@
-import { cpfSchema, requiredPhoneSchema } from './person-schemas';
-import { emailSchema, personNameSchema, uuidSchema, z } from './validation';
+import { isValidCpf, onlyDigits } from './documents';
+import { MAX_CENTS } from './money';
+import { cpfSchema, dateOnlySchema, optionalText, requiredPhoneSchema } from './person-schemas';
+import { emailSchema, optionalPhoneSchema, personNameSchema, uuidSchema, z } from './validation';
 
 /** Pedidos, ingressos e pagamentos: rótulos, códigos e o formulário de compra. */
 
@@ -34,8 +36,8 @@ export const ORDER_CHANNELS = ['ONLINE', 'POS', 'COURTESY', 'ADMIN'] as const;
 export type OrderChannelKey = (typeof ORDER_CHANNELS)[number];
 
 export const ORDER_CHANNEL_LABELS: Readonly<Record<OrderChannelKey, string>> = {
-  ONLINE: 'Site',
-  POS: 'Bilheteria',
+  ONLINE: 'Online',
+  POS: 'Presencial',
   COURTESY: 'Cortesia',
   ADMIN: 'Painel',
 };
@@ -114,6 +116,67 @@ export function effectiveOrderStatus(
   if (order.status === 'PENDING_PAYMENT' && order.expiresAt && order.expiresAt <= now) return 'EXPIRED';
   return order.status;
 }
+
+// ─── Situação da venda ──────────────────────────────────────────────────────
+
+export const SALE_STATUSES = ['PAID', 'PENDING', 'CANCELLED', 'REFUNDED'] as const;
+export type SaleStatusKey = (typeof SALE_STATUSES)[number];
+
+export const SALE_STATUS_LABELS: Readonly<Record<SaleStatusKey, string>> = {
+  PAID: 'Pago',
+  PENDING: 'Pendente',
+  CANCELLED: 'Cancelado',
+  REFUNDED: 'Reembolsado',
+};
+
+/**
+ * Pedido e financeiro resumidos nas quatro situações que a equipe usa. Vencido
+ * sem pagamento conta como cancelado; qualquer devolução, como reembolsado.
+ */
+export function saleStatusOf(
+  order: { status: OrderStatusKey; financialStatus: FinancialStatusKey; expiresAt: Date | null },
+  now: Date = new Date(),
+): SaleStatusKey {
+  if (order.financialStatus === 'REFUNDED' || order.financialStatus === 'PARTIALLY_REFUNDED')
+    return 'REFUNDED';
+  const status = effectiveOrderStatus(order, now);
+  if (status === 'CONFIRMED') return 'PAID';
+  if (status === 'PENDING_PAYMENT') return 'PENDING';
+  return 'CANCELLED';
+}
+
+// ─── Formas de pagamento agrupadas ──────────────────────────────────────────
+
+export const PAYMENT_GROUPS = ['PIX', 'CARD', 'CASH', 'OTHER'] as const;
+export type PaymentGroupKey = (typeof PAYMENT_GROUPS)[number];
+
+export const PAYMENT_GROUP_LABELS: Readonly<Record<PaymentGroupKey, string>> = {
+  PIX: 'PIX',
+  CARD: 'Cartão',
+  CASH: 'Dinheiro',
+  OTHER: 'Outros',
+};
+
+export const PAYMENT_GROUP_METHODS: Readonly<Record<PaymentGroupKey, readonly PaymentMethodKey[]>> = {
+  PIX: ['PIX'],
+  CARD: ['CREDIT_CARD', 'DEBIT_CARD', 'CARD_TERMINAL'],
+  CASH: ['CASH'],
+  OTHER: ['COURTESY'],
+};
+
+export function paymentGroupOf(method: PaymentMethodKey): PaymentGroupKey {
+  for (const grupo of PAYMENT_GROUPS) if (PAYMENT_GROUP_METHODS[grupo].includes(method)) return grupo;
+  return 'OTHER';
+}
+
+export const PAYMENT_PROVIDERS = ['MOCK', 'ASAAS', 'MANUAL'] as const;
+export type PaymentProviderKey = (typeof PAYMENT_PROVIDERS)[number];
+
+export const PAYMENT_PROVIDER_LABELS: Readonly<Record<PaymentProviderKey, string>> = {
+  MOCK: 'Provedor de teste',
+  ASAAS: 'Asaas',
+  MANUAL: 'Recebido pela equipe',
+};
 
 // ─── Código do pedido ───────────────────────────────────────────────────────
 
@@ -200,3 +263,111 @@ export const orderReasonSchema = z.strictObject({
 });
 
 export type OrderReasonInput = z.input<typeof orderReasonSchema>;
+
+// ─── Venda presencial ───────────────────────────────────────────────────────
+
+export const POS_PAYMENT_METHODS = ['CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'PIX'] as const;
+export type PosPaymentMethod = (typeof POS_PAYMENT_METHODS)[number];
+
+/** E-mail opcional: vazio vira `null`. */
+const optionalEmailSchema = z
+  .string()
+  .trim()
+  .max(254, 'E-mail muito longo')
+  .nullish()
+  .transform((valor, ctx) => {
+    if (!valor) return null;
+    const parsed = emailSchema.safeParse(valor);
+    if (!parsed.success) {
+      ctx.addIssue({ code: 'custom', message: 'Informe um e-mail válido' });
+      return z.NEVER;
+    }
+    return parsed.data;
+  });
+
+/** CPF opcional: vazio vira `null`; preenchido precisa ser válido. Devolve só os dígitos. */
+const optionalCpfSchema = z
+  .string()
+  .max(20, 'CPF inválido')
+  .nullish()
+  .transform((valor, ctx) => {
+    const digitos = onlyDigits(valor ?? '');
+    if (!digitos) return null;
+    if (!isValidCpf(digitos)) {
+      ctx.addIssue({ code: 'custom', message: 'CPF inválido' });
+      return z.NEVER;
+    }
+    return digitos;
+  });
+
+const posCouponSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .max(30, 'Código de cupom inválido')
+  .nullish()
+  .transform((valor) => (valor ? valor : null));
+
+const posItemsSchema = z
+  .array(
+    z.strictObject({
+      ticketTypeId: uuidSchema,
+      quantity: z
+        .number()
+        .int('Quantidade inválida')
+        .min(1, 'Quantidade inválida')
+        .max(500, 'Quantidade muito alta'),
+    }),
+  )
+  .min(1, 'Escolha pelo menos um ingresso')
+  .max(30, 'Ingressos demais numa venda');
+
+const manualDiscountSchema = z
+  .number()
+  .int('Desconto inválido')
+  .min(0, 'Desconto inválido')
+  .max(MAX_CENTS)
+  .nullish()
+  .transform((valor) => valor ?? 0);
+
+/** Prévia da venda no balcão: o servidor recalcula preço, cupom e vagas a cada alteração. */
+export const posQuoteSchema = z.strictObject({
+  visitDate: dateOnlySchema,
+  items: posItemsSchema,
+  couponCode: posCouponSchema,
+  manualDiscountCents: manualDiscountSchema,
+  customerId: uuidSchema.nullish().transform((valor) => valor ?? null),
+  buyerCpf: optionalCpfSchema,
+});
+
+export type PosQuoteInput = z.input<typeof posQuoteSchema>;
+
+export const posSaleSchema = z.strictObject({
+  visitDate: dateOnlySchema,
+  items: posItemsSchema,
+  couponCode: posCouponSchema,
+  manualDiscountCents: manualDiscountSchema,
+  discountReason: optionalText(200),
+  customerId: uuidSchema.nullish().transform((valor) => valor ?? null),
+  buyer: z.strictObject({
+    name: personNameSchema,
+    phone: optionalPhoneSchema,
+    email: optionalEmailSchema,
+    cpf: optionalCpfSchema,
+  }),
+  /** Nome, CPF e nascimento dos visitantes são opcionais no balcão; quando informados, são conferidos. */
+  holders: z.array(holderInputSchema).max(500).default([]),
+  paymentMethod: z.enum(POS_PAYMENT_METHODS, { error: 'Escolha a forma de pagamento' }),
+  /** Dinheiro entregue pelo cliente, para calcular o troco. */
+  cashReceivedCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_CENTS)
+    .nullish()
+    .transform((valor) => valor ?? null),
+  marketingOptIn: z.boolean().default(false),
+  idempotencyKey: uuidSchema,
+});
+
+export type PosSaleInput = z.input<typeof posSaleSchema>;
