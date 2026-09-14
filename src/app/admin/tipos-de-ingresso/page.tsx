@@ -4,7 +4,6 @@ import Link from 'next/link';
 
 import { NoPermission } from '@/components/admin/no-permission';
 import { SalesLink } from '@/components/admin/sales-link';
-import { CampaignLinkBuilder } from '@/components/admin/tickets/campaign-link-builder';
 import { ReorderButtons } from '@/components/admin/tickets/reorder-buttons';
 import { TicketTypeFormDialog } from '@/components/admin/tickets/ticket-type-form-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -70,20 +69,6 @@ export default async function TiposDeIngressoPage() {
         />
         <CardContent className="grid gap-5">
           <SalesLink url={paginaDeCompra} />
-          <details className="group rounded-xl ring-1 ring-inset ring-ink-200/80">
-            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-pool-700 hover:text-pool-800">
-              Criar link de campanha
-              <span className="block text-[13px] font-normal text-ink-500">
-                Para anúncios, redes sociais e WhatsApp: o painel mostra quantas vendas vieram de cada link.
-              </span>
-            </summary>
-            <div className="border-t border-ink-100 px-4 py-4">
-              <CampaignLinkBuilder
-                baseUrl={paginaDeCompra}
-                ticketTypes={ativosNoSite.map((tipo) => ({ slug: tipo.slug, name: tipo.name }))}
-              />
-            </div>
-          </details>
         </CardContent>
       </Card>
 

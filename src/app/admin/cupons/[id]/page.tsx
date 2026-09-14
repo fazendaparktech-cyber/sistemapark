@@ -161,10 +161,7 @@ export default async function CupomPage({ params }: { params: Promise<{ id: stri
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
         <Card>
-          <CardHeader
-            title="Regras"
-            description={`Criado em ${formatDateTimeBR(cupom.createdAt, fuso)}${cupom.createdByName ? ` por ${cupom.createdByName}` : ''}`}
-          />
+          <CardHeader title="Regras" description={`Criado em ${formatDateTimeBR(cupom.createdAt, fuso)}`} />
           <CardContent className="pt-2">
             <dl className="divide-y divide-ink-100">
               <Regra rotulo="Desconto" valor={cupom.summary} />

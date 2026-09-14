@@ -18,7 +18,6 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <AdminShell
       nav={navFor(auth.permissions)}
-      parkName={auth.park.name}
       timeZone={auth.park.timezone}
       canSearch={(['customers.view', 'orders.view', 'tickets.view'] as const).some((permissao) =>
         auth.permissions.has(permissao),

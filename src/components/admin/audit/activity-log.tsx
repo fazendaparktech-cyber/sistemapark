@@ -129,11 +129,10 @@ export async function ActivityLog({
                       <span className="block text-sm font-semibold text-ink-900">
                         {auditActionLabel(item.action)}
                       </span>
-                      <span className="block truncate font-mono text-[11px] text-ink-400">{item.action}</span>
                     </span>
                     <span className="min-w-0 text-[13px] sm:text-right">
                       {item.actor ? (
-                        <span className="block truncate font-semibold text-ink-800">Painel</span>
+                        <Badge tone="neutral">Painel</Badge>
                       ) : (
                         <Badge tone="neutral">{auditActorFallback(item.action, item.actorType)}</Badge>
                       )}

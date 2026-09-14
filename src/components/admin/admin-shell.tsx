@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   LogOut,
   type LucideIcon,
-  MapPin,
   Megaphone,
   Menu,
   ReceiptText,
@@ -119,20 +118,6 @@ function Navegacao({ nav, onNavigate }: { nav: AdminNavSection[]; onNavigate?: (
   );
 }
 
-function CartaoDoParque({ nome }: { nome: string }) {
-  return (
-    <div className="mt-3 flex items-center gap-3 border-t border-ink-100 px-3 pt-4">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-grape-50 text-grape-600">
-        <MapPin className="size-4" aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold text-ink-900">{nome}</p>
-        <p className="text-xs text-ink-500">Unidade atual</p>
-      </div>
-    </div>
-  );
-}
-
 const ITEM_DO_MENU =
   'flex w-full cursor-pointer select-none items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 outline-none data-[highlighted]:bg-ink-100 data-[highlighted]:text-ink-900 data-[disabled]:opacity-50';
 
@@ -189,14 +174,12 @@ function MenuDaConta({ user }: { user: ShellUser }) {
 
 export function AdminShell({
   nav,
-  parkName,
   timeZone,
   canSearch,
   user,
   children,
 }: {
   nav: AdminNavSection[];
-  parkName: string;
   /** Fuso do parque, para as datas dos avisos. */
   timeZone: string;
   /** Busca do topo: aparece para quem vê clientes, vendas ou ingressos. */
@@ -216,7 +199,6 @@ export function AdminShell({
           <div className="-mx-1 mt-7 flex-1 overflow-y-auto px-1">
             <Navegacao nav={nav} />
           </div>
-          <CartaoDoParque nome={parkName} />
         </div>
       </aside>
 
@@ -250,7 +232,6 @@ export function AdminShell({
                     <div className="mt-8 flex-1 overflow-y-auto pl-1">
                       <Navegacao nav={nav} onNavigate={() => setGavetaAberta(false)} />
                     </div>
-                    <CartaoDoParque nome={parkName} />
                   </Gaveta.Content>
                 </Gaveta.Portal>
               </Gaveta.Root>

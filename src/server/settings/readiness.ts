@@ -82,7 +82,7 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
         dadosCompletos && contato
           ? 'Razão social, CNPJ, endereço e contato preenchidos.'
           : 'Preencha razão social, CNPJ, endereço e um contato: aparecem no site, nos e-mails e nas políticas.',
-      href: '/admin/configuracoes#dados-do-parque',
+      href: '/admin/configuracoes?aba=parque',
     },
     {
       key: 'policies',
@@ -91,7 +91,7 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
       detail: politicas
         ? 'Cancelamento, termos e privacidade já foram revisados pelo parque.'
         : 'O site usa textos padrão de cancelamento, termos e privacidade. Revise antes de vender.',
-      href: '/admin/configuracoes#politicas',
+      href: '/admin/configuracoes?aba=politicas',
     },
     {
       key: 'payments',
