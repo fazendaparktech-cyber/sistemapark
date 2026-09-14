@@ -1,83 +1,79 @@
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, CircleCheck, CircleX } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { NoPermission } from '@/components/admin/no-permission';
-import { SalesLink } from '@/components/admin/sales-link';
-import { DeletePriceRuleButton, PriceRuleDialog } from '@/components/admin/tickets/price-rule-dialog';
-import { TicketTypeFormDialog } from '@/components/admin/tickets/ticket-type-form-dialog';
+import { ChannelBadge, SaleStatusBadge, TicketStatusBadge } from '@/components/admin/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Table, TableContainer, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { HOLDER_DATA_LABELS, SALES_CHANNEL_LABELS, TICKET_CATEGORY_LABELS } from '@/lib/catalog';
-import { formatDateBR } from '@/lib/dates';
-import { formatNumber, plural } from '@/lib/format';
+import { CopyButton } from '@/components/ui/copy-button';
+import { formatDateBR, formatDateTimeBR } from '@/lib/dates';
+import { formatPhoneBR } from '@/lib/documents';
 import { formatBRL } from '@/lib/money';
-import { DAY_KIND_LABELS } from '@/lib/pricing';
+import { CHECKIN_METHOD_LABELS, CHECKIN_REASON_LABELS, TICKET_EVENT_LABELS } from '@/lib/tickets';
 import { uuidSchema } from '@/lib/validation';
+import { formatDateLong } from '@/lib/weekdays';
 import { can } from '@/server/auth/context';
 import { requirePageAuth } from '@/server/auth/guards';
-import { getTicketTypeAdmin, type AdminPriceRule, type AdminTicketType } from '@/server/catalog/service';
-import { env } from '@/server/env';
 import { isAppError } from '@/server/errors';
+import { getTicketAdmin, type TicketDetail } from '@/server/tickets/service';
 
 export const metadata: Metadata = { title: 'Ingresso' };
 
-function intervalo(de: string | null, ate: string | null, vazio: string): string {
-  if (de && ate) return `${formatDateBR(de)} a ${formatDateBR(ate)}`;
-  if (de) return `A partir de ${formatDateBR(de)}`;
-  if (ate) return `Até ${formatDateBR(ate)}`;
-  return vazio;
-}
-
-function condicoes(regra: AdminPriceRule): string[] {
-  const lista: string[] = [];
-  lista.push(
-    regra.dayKinds.length > 0
-      ? regra.dayKinds.map((tipo) => DAY_KIND_LABELS[tipo]).join(', ')
-      : 'Qualquer dia',
-  );
-  if (regra.visitFrom || regra.visitUntil)
-    lista.push(`Visitas: ${intervalo(regra.visitFrom, regra.visitUntil, '')}`);
-  if (regra.saleFrom || regra.saleUntil)
-    lista.push(`Vendas: ${intervalo(regra.saleFrom, regra.saleUntil, '')}`);
-  return lista;
-}
-
-function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Linha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 text-sm">
-      <dt className="text-ink-500">{rotulo}</dt>
-      <dd className="text-right font-medium text-ink-900">{valor}</dd>
+      <dt className="shrink-0 text-ink-500">{rotulo}</dt>
+      <dd className="min-w-0 text-right font-medium text-ink-900">{children}</dd>
     </div>
   );
 }
 
-function faixa(tipo: AdminTicketType): string {
-  if (tipo.minAge !== null && tipo.maxAge !== null) return `${tipo.minAge} a ${tipo.maxAge} anos`;
-  if (tipo.maxAge !== null) return `Até ${tipo.maxAge} anos`;
-  if (tipo.minAge !== null) return `A partir de ${tipo.minAge} anos`;
-  return 'Qualquer idade';
+function detalheDoEvento(dados: unknown): string | null {
+  if (!dados || typeof dados !== 'object' || Array.isArray(dados)) return null;
+  const d = dados as Record<string, unknown>;
+  if (d.channel === 'whatsapp') return 'Pelo WhatsApp';
+  if (d.channel === 'email') return 'Por e-mail';
+  if (d.method === 'QR') return 'Leitura do QR Code';
+  if (d.method === 'MANUAL') return 'Liberado pela busca';
+  if (typeof d.reason === 'string') return `Motivo: ${d.reason}`;
+  return null;
+}
+
+function mensagemSemQr(ingresso: TicketDetail, fuso: string): string {
+  switch (ingresso.status) {
+    case 'CHECKED_IN':
+      return ingresso.checkedInAt
+        ? `Entrada registrada em ${formatDateTimeBR(ingresso.checkedInAt, fuso)}${
+            ingresso.checkedInByName ? ` por ${ingresso.checkedInByName}` : ''
+          }. O QR Code não vale mais.`
+        : 'Entrada já registrada. O QR Code não vale mais.';
+    case 'PENDING_PAYMENT':
+      return 'O QR Code aparece quando o pagamento for confirmado.';
+    case 'EXPIRED':
+      return 'A data da visita passou sem entrada registrada.';
+    case 'REFUNDED':
+      return 'O valor foi devolvido e o ingresso não vale mais.';
+    default:
+      return 'Ingresso cancelado. O QR Code não vale mais.';
+  }
 }
 
 export default async function IngressoPage({ params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePageAuth();
-  if (!can(auth, 'ticket_types.view')) return <NoPermission />;
+  if (!can(auth, 'tickets.view')) return <NoPermission />;
   const { id } = await params;
   if (!uuidSchema.safeParse(id).success) notFound();
 
-  let tipo: AdminTicketType;
+  let ingresso: TicketDetail;
   try {
-    tipo = await getTicketTypeAdmin(auth, id);
+    ingresso = await getTicketAdmin(auth, id);
   } catch (erro) {
     if (isAppError(erro) && erro.code === 'NOT_FOUND') notFound();
     throw erro;
   }
-
-  const podeEditar = can(auth, 'ticket_types.manage');
-  const podePrecificar = can(auth, 'ticket_types.manage');
-  const linkDoIngresso = `${env().APP_URL}/comprar?ingresso=${tipo.slug}`;
+  const fuso = auth.park.timezone;
 
   return (
     <div className="grid gap-6">
@@ -86,237 +82,195 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
         className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-ink-800"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Ingressos e preços
+        Ingressos
       </Link>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-pool-700">Tipo de ingresso</p>
-          <h1 className="font-display text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink-900 sm:text-[30px]">
-            {tipo.name}
-          </h1>
-          {tipo.description ? <p className="mt-1 text-sm text-ink-600">{tipo.description}</p> : null}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge tone="info">{TICKET_CATEGORY_LABELS[tipo.category]}</Badge>
-            <Badge tone={tipo.isActive ? 'success' : 'neutral'} dot>
-              {tipo.isActive ? 'Ativo' : 'Inativo'}
-            </Badge>
-          </div>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-pool-700">{ingresso.typeName}</p>
+        <h1 className="font-mono text-[26px] font-semibold tracking-tight text-ink-900 sm:text-[30px]">
+          {ingresso.code}
+        </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          {ingresso.holderName ?? ingresso.buyerName} · visita em{' '}
+          <span className="capitalize-first">{formatDateLong(ingresso.visitDate)}</span>
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <TicketStatusBadge status={ingresso.status} />
+          <ChannelBadge channel={ingresso.channel} />
+          {ingresso.isCourtesy ? <Badge tone="citrus">Cortesia</Badge> : null}
         </div>
-        {podeEditar ? (
-          <TicketTypeFormDialog
-            ticketType={{
-              id: tipo.id,
-              name: tipo.name,
-              description: tipo.description,
-              category: tipo.category,
-              basePriceCents: tipo.basePriceCents,
-              minAge: tipo.minAge,
-              maxAge: tipo.maxAge,
-              holderData: tipo.holderData,
-              requiresDocument: tipo.requiresDocument,
-              documentHint: tipo.documentHint,
-              occupiesCapacity: tipo.occupiesCapacity,
-              peoplePerTicket: tipo.peoplePerTicket,
-              dailyQuota: tipo.dailyQuota,
-              minPerOrder: tipo.minPerOrder,
-              maxPerOrder: tipo.maxPerOrder,
-              maxPerCustomerPerDay: tipo.maxPerCustomerPerDay,
-              channels: tipo.channels,
-              availableFrom: tipo.availableFrom,
-              availableUntil: tipo.availableUntil,
-              rulesText: tipo.rulesText,
-              isActive: tipo.isActive,
-            }}
-          />
-        ) : null}
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
         <div className="grid gap-6">
           <Card>
-            <CardHeader title="Preço" />
-            <CardContent className="pt-3">
-              <p className="text-xs font-semibold text-ink-500">Para hoje</p>
-              <p className="tabular font-display text-3xl font-semibold text-ink-900">
-                {tipo.todayPrice.priceCents === 0 ? 'Gratuito' : formatBRL(tipo.todayPrice.priceCents)}
-              </p>
-              <p className="text-[13px] text-ink-500">
-                {tipo.todayPrice.label
-                  ? `Regra: ${tipo.todayPrice.label}`
-                  : 'Preço base, nenhuma regra vale hoje'}
-              </p>
-              <dl className="mt-3 divide-y divide-ink-100 border-t border-ink-100">
-                <Linha rotulo="Preço base" valor={formatBRL(tipo.basePriceCents)} />
-                <Linha rotulo="Vendidos" valor={formatNumber(tipo.soldUnits)} />
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader title="Regras de uso e venda" />
-            <CardContent className="pt-2">
-              <dl className="divide-y divide-ink-100">
-                <Linha
-                  rotulo="Onde vende"
-                  valor={tipo.channels.map((canal) => SALES_CHANNEL_LABELS[canal]).join(' e ')}
-                />
-                <Linha rotulo="Idade" valor={faixa(tipo)} />
-                <Linha rotulo="Dados de cada visitante" valor={HOLDER_DATA_LABELS[tipo.holderData]} />
-                <Linha
-                  rotulo="Documento na entrada"
-                  valor={tipo.requiresDocument ? (tipo.documentHint ?? 'Sim') : 'Não exige'}
-                />
-                <Linha rotulo="Pessoas por ingresso" valor={formatNumber(tipo.peoplePerTicket)} />
-                <Linha rotulo="Lotação" valor={tipo.occupiesCapacity ? 'Ocupa vaga' : 'Não ocupa vaga'} />
-                <Linha
-                  rotulo="Limite por dia"
-                  valor={tipo.dailyQuota !== null ? formatNumber(tipo.dailyQuota) : 'Só a lotação'}
-                />
-                <Linha
-                  rotulo="Por pedido"
-                  valor={
-                    tipo.minPerOrder !== null || tipo.maxPerOrder !== null
-                      ? `${tipo.minPerOrder ?? 1} a ${tipo.maxPerOrder ?? 'sem máximo'}`
-                      : 'Sem limite próprio'
-                  }
-                />
-                <Linha
-                  rotulo="Por CPF na data"
-                  valor={
-                    tipo.maxPerCustomerPerDay !== null
-                      ? formatNumber(tipo.maxPerCustomerPerDay)
-                      : 'Sem limite'
-                  }
-                />
-                <Linha
-                  rotulo="Datas de visita"
-                  valor={intervalo(tipo.availableFrom, tipo.availableUntil, 'Qualquer data aberta')}
-                />
-              </dl>
-              {tipo.rulesText ? (
-                <p className="mt-3 whitespace-pre-line rounded-xl bg-ink-50 px-4 py-3 text-[13px] leading-6 text-ink-700">
-                  {tipo.rulesText}
-                </p>
+            <CardHeader title="QR Code" />
+            <CardContent className="grid justify-items-center gap-4 pt-4 text-center">
+              {ingresso.qrSvg ? (
+                <>
+                  <div
+                    role="img"
+                    aria-label={`QR Code do ingresso ${ingresso.code}`}
+                    className="size-56 rounded-2xl bg-white p-2 ring-1 ring-ink-200 [&_svg]:size-full"
+                    dangerouslySetInnerHTML={{ __html: ingresso.qrSvg }}
+                  />
+                  <p className="max-w-xs text-sm text-ink-500">
+                    Único para este ingresso e assinado pelo sistema. Libera uma entrada, na data da visita.
+                  </p>
+                </>
+              ) : (
+                <p className="max-w-xs py-6 text-sm text-ink-600">{mensagemSemQr(ingresso, fuso)}</p>
+              )}
+              {ingresso.publicUrl ? (
+                <CopyButton value={ingresso.publicUrl} label="Copiar link dos ingressos" />
               ) : null}
             </CardContent>
           </Card>
 
-          {tipo.channels.includes('ONLINE') && tipo.isActive ? (
-            <Card>
-              <CardHeader
-                title="Link com este ingresso"
-                description="Abre a compra com este ingresso já selecionado."
-              />
-              <CardContent className="pt-3">
-                <SalesLink url={linkDoIngresso} />
-              </CardContent>
-            </Card>
-          ) : null}
+          <Card>
+            <CardHeader title="Dados do ingresso" />
+            <CardContent className="pt-2">
+              <dl className="divide-y divide-ink-100">
+                <Linha rotulo="Visitante">{ingresso.holderName ?? 'Sem nome informado'}</Linha>
+                {ingresso.holderCpfMasked ? <Linha rotulo="CPF">{ingresso.holderCpfMasked}</Linha> : null}
+                {ingresso.holderBirthDate ? (
+                  <Linha rotulo="Nascimento">{formatDateBR(ingresso.holderBirthDate)}</Linha>
+                ) : null}
+                <Linha rotulo="Tipo">{ingresso.typeName}</Linha>
+                <Linha rotulo="Data da visita">{formatDateBR(ingresso.visitDate)}</Linha>
+                <Linha rotulo="Valor">
+                  <span className="tabular">
+                    {ingresso.isCourtesy ? 'Cortesia' : formatBRL(ingresso.priceCents)}
+                  </span>
+                </Linha>
+                <Linha rotulo="Entrada">
+                  {ingresso.checkedInAt
+                    ? `${formatDateTimeBR(ingresso.checkedInAt, fuso)}${
+                        ingresso.checkedInByName ? ` · ${ingresso.checkedInByName}` : ''
+                      }`
+                    : 'Não registrada'}
+                </Linha>
+                <Linha rotulo="Emitido em">{formatDateTimeBR(ingresso.createdAt, fuso)}</Linha>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Pedido"
+              action={
+                can(auth, 'orders.view') ? (
+                  <Link
+                    href={`/admin/vendas/${ingresso.order.id}`}
+                    className="text-sm font-semibold text-pool-700 hover:text-pool-800"
+                  >
+                    Ver venda
+                  </Link>
+                ) : null
+              }
+            />
+            <CardContent className="pt-2">
+              <dl className="divide-y divide-ink-100">
+                <Linha rotulo="Número">
+                  <span className="font-mono">{ingresso.order.code}</span>
+                </Linha>
+                <Linha rotulo="Situação">
+                  <SaleStatusBadge status={ingresso.order.saleStatus} />
+                </Linha>
+                <Linha rotulo="Cliente">
+                  {ingresso.customer && can(auth, 'customers.view') ? (
+                    <Link
+                      href={`/admin/clientes/${ingresso.customer.id}`}
+                      className="text-pool-700 hover:text-pool-800"
+                    >
+                      {ingresso.customer.name}
+                    </Link>
+                  ) : (
+                    ingresso.buyerName
+                  )}
+                </Linha>
+                {ingresso.buyerPhone ? (
+                  <Linha rotulo="Celular">{formatPhoneBR(ingresso.buyerPhone)}</Linha>
+                ) : null}
+                {ingresso.order.buyerEmail ? (
+                  <Linha rotulo="E-mail">
+                    <span className="break-all">{ingresso.order.buyerEmail}</span>
+                  </Linha>
+                ) : null}
+                <Linha rotulo="Total do pedido">
+                  <span className="tabular">{formatBRL(ingresso.order.totalCents)}</span>
+                </Linha>
+              </dl>
+            </CardContent>
+          </Card>
         </div>
 
-        <section className="grid gap-3" aria-labelledby="regras-de-preco">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 id="regras-de-preco" className="font-display text-[17px] font-semibold text-ink-900">
-                Regras de preço
-              </h2>
-              <p className="text-[13px] text-ink-500">
-                {tipo.prices.length === 0
-                  ? 'Sem regras: o preço base vale para todas as datas.'
-                  : plural(tipo.prices.length, 'regra cadastrada', 'regras cadastradas')}
-              </p>
-            </div>
-            {podePrecificar ? <PriceRuleDialog ticketTypeId={tipo.id} /> : null}
-          </div>
-
-          <div className="flex gap-3 rounded-xl bg-pool-50 px-4 py-3 text-[13px] leading-5 text-pool-900 ring-1 ring-inset ring-pool-200">
-            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <p>
-              Entre as regras ativas que valem para a data e o momento da compra, vence a de maior prioridade.
-              Empatando, vence a do tipo marcado no calendário (feriado, evento), depois a do dia da semana,
-              depois a geral. Lote esgotado deixa de valer sozinho.
-            </p>
-          </div>
-
-          {tipo.prices.length > 0 ? (
-            <TableContainer>
-              <Table>
-                <THead>
-                  <tr>
-                    <TH>Regra</TH>
-                    <TH className="text-right">Preço</TH>
-                    <TH>Quando vale</TH>
-                    <TH className="text-right">Lote</TH>
-                    <TH className="text-right">Prioridade</TH>
-                    {podePrecificar ? (
-                      <TH>
-                        <span className="sr-only">Ações</span>
-                      </TH>
-                    ) : null}
-                  </tr>
-                </THead>
-                <TBody>
-                  {tipo.prices.map((regra) => (
-                    <TR key={regra.id} className={regra.isActive ? undefined : 'bg-ink-50/60 text-ink-500'}>
-                      <TD>
-                        <p className="font-medium text-ink-900">{regra.name}</p>
-                        {regra.isActive ? null : <Badge tone="neutral">Inativa</Badge>}
-                        {tipo.todayPrice.ruleId === regra.id ? (
-                          <Badge tone="success">Valendo hoje</Badge>
-                        ) : null}
-                      </TD>
-                      <TD className="whitespace-nowrap text-right">
-                        <p className="tabular font-semibold">{formatBRL(regra.priceCents)}</p>
-                        {regra.compareAtCents ? (
-                          <p className="tabular text-xs text-ink-400 line-through">
-                            {formatBRL(regra.compareAtCents)}
-                          </p>
-                        ) : null}
-                      </TD>
-                      <TD className="text-[13px] text-ink-600">
-                        {condicoes(regra).map((condicao) => (
-                          <p key={condicao}>{condicao}</p>
-                        ))}
-                      </TD>
-                      <TD className="tabular whitespace-nowrap text-right text-[13px]">
-                        {regra.lotQuantity !== null
-                          ? `${formatNumber(regra.lotSold ?? 0)} / ${formatNumber(regra.lotQuantity)}`
-                          : 'Sem lote'}
-                      </TD>
-                      <TD className="tabular text-right">{regra.priority}</TD>
-                      {podePrecificar ? (
-                        <TD>
-                          <div className="flex justify-end gap-1">
-                            <PriceRuleDialog
-                              ticketTypeId={tipo.id}
-                              rule={{
-                                id: regra.id,
-                                name: regra.name,
-                                priceCents: regra.priceCents,
-                                compareAtCents: regra.compareAtCents,
-                                dayKinds: regra.dayKinds,
-                                visitFrom: regra.visitFrom,
-                                visitUntil: regra.visitUntil,
-                                saleFrom: regra.saleFrom,
-                                saleUntil: regra.saleUntil,
-                                lotQuantity: regra.lotQuantity,
-                                lotSold: regra.lotSold,
-                                priority: regra.priority,
-                                isActive: regra.isActive,
-                              }}
-                            />
-                            <DeletePriceRuleButton ruleId={regra.id} name={regra.name} />
-                          </div>
-                        </TD>
-                      ) : null}
-                    </TR>
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader
+              title="Tentativas de entrada"
+              description="Cada leitura na portaria, liberada ou negada."
+            />
+            <CardContent className="pt-3">
+              {ingresso.attempts.length === 0 ? (
+                <p className="text-sm text-ink-500">Nenhuma leitura deste ingresso na portaria.</p>
+              ) : (
+                <ul className="divide-y divide-ink-100">
+                  {ingresso.attempts.map((tentativa) => (
+                    <li key={tentativa.id} className="flex items-start gap-3 py-3">
+                      {tentativa.allowed ? (
+                        <CircleCheck className="mt-0.5 size-5 shrink-0 text-success-700" aria-hidden />
+                      ) : (
+                        <CircleX className="mt-0.5 size-5 shrink-0 text-danger-700" aria-hidden />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-ink-900">
+                          {tentativa.allowed
+                            ? 'Entrada liberada'
+                            : tentativa.reason
+                              ? CHECKIN_REASON_LABELS[tentativa.reason]
+                              : 'Entrada negada'}
+                        </p>
+                        <p className="text-[13px] text-ink-500">
+                          {formatDateTimeBR(tentativa.at, fuso)} · {CHECKIN_METHOD_LABELS[tentativa.method]}
+                          {tentativa.operatorName ? ` · ${tentativa.operatorName}` : ''}
+                          {tentativa.device ? ` · ${tentativa.device}` : ''}
+                        </p>
+                      </div>
+                    </li>
                   ))}
-                </TBody>
-              </Table>
-            </TableContainer>
-          ) : null}
-        </section>
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Histórico" />
+            <CardContent className="pt-3">
+              <ol className="relative grid gap-4 border-l border-ink-200 pl-5">
+                {ingresso.events.map((evento) => {
+                  const detalhe = detalheDoEvento(evento.data);
+                  return (
+                    <li key={evento.id} className="relative">
+                      <span
+                        aria-hidden
+                        className="absolute -left-[25px] top-1.5 size-2.5 rounded-full bg-white ring-2 ring-pool-500"
+                      />
+                      <p className="text-sm font-medium text-ink-900">
+                        {TICKET_EVENT_LABELS[evento.type] ?? evento.type}
+                      </p>
+                      <p className="text-xs text-ink-500">
+                        {formatDateTimeBR(evento.at, fuso)}
+                        {evento.actorName ? ` · ${evento.actorName}` : ''}
+                      </p>
+                      {detalhe ? <p className="mt-0.5 text-[13px] text-ink-600">{detalhe}</p> : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

@@ -76,7 +76,7 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
         tiposOnline > 0
           ? `${tiposOnline} ${tiposOnline === 1 ? 'tipo de ingresso ativo' : 'tipos de ingresso ativos'} no site.`
           : 'Nenhum tipo de ingresso ativo para venda no site.',
-      href: '/admin/ingressos',
+      href: '/admin/tipos-de-ingresso',
     },
     {
       key: 'park',

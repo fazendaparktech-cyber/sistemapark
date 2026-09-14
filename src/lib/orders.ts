@@ -98,7 +98,7 @@ export type TicketStatusKey = (typeof TICKET_STATUSES)[number];
 
 export const TICKET_STATUS_LABELS: Readonly<Record<TicketStatusKey, string>> = {
   PENDING_PAYMENT: 'Aguardando pagamento',
-  ACTIVE: 'Válido',
+  ACTIVE: 'Ativo',
   CHECKED_IN: 'Utilizado',
   CANCELLED: 'Cancelado',
   REFUNDED: 'Reembolsado',

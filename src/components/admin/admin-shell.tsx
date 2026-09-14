@@ -11,8 +11,10 @@ import {
   MapPin,
   Menu,
   ReceiptText,
+  ScanLine,
   Settings,
   ShieldCheck,
+  Tags,
   Ticket,
   TicketPercent,
   Users,
@@ -36,7 +38,9 @@ const ICONES: Record<AdminIcon, LucideIcon> = {
   customers: UsersRound,
   coupons: TicketPercent,
   tickets: Ticket,
+  ticketTypes: Tags,
   calendar: CalendarDays,
+  gate: ScanLine,
   team: Users,
   permissions: ShieldCheck,
   audit: ClipboardList,
@@ -64,11 +68,13 @@ function Navegacao({ nav, onNavigate }: { nav: AdminNavSection[]; onNavigate?: (
   return (
     <nav aria-label="Menu do painel" className="grid gap-7">
       {nav.map((secao) => (
-        <div key={secao.label}>
-          <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-            {secao.label}
-          </p>
-          <ul className="mt-2 grid gap-0.5">
+        <div key={secao.label || 'inicio'}>
+          {secao.label ? (
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+              {secao.label}
+            </p>
+          ) : null}
+          <ul className="grid gap-0.5">
             {secao.items.map((item) => {
               const Icone = ICONES[item.icon];
               const atual = ativo(item.href);

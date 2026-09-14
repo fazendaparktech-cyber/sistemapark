@@ -27,7 +27,7 @@ import { databaseTarget } from './lib/database-target';
 const BASE = process.env.QA_BASE_URL ?? 'http://localhost:3000';
 
 async function paginas(parkId: string): Promise<{ nome: string; caminho: string }[]> {
-  const [pedido, cliente, cupom, ingresso] = await Promise.all([
+  const [pedido, cliente, cupom, ingresso, bilhete] = await Promise.all([
     prisma.order.findFirst({
       where: { parkId, status: 'CONFIRMED', couponId: { not: null } },
       orderBy: { createdAt: 'desc' },
@@ -38,6 +38,7 @@ async function paginas(parkId: string): Promise<{ nome: string; caminho: string 
     }),
     prisma.coupon.findFirst({ where: { parkId }, orderBy: { createdAt: 'asc' } }),
     prisma.ticketType.findFirst({ where: { parkId }, orderBy: { sortOrder: 'asc' } }),
+    prisma.ticket.findFirst({ where: { parkId, status: 'ACTIVE' }, orderBy: { createdAt: 'desc' } }),
   ]);
   const agora = new Date();
   const selecao = { id: true, code: true, accessVersion: true } as const;
@@ -69,12 +70,15 @@ async function paginas(parkId: string): Promise<{ nome: string; caminho: string 
     { nome: 'vendas', caminho: '/admin/vendas' },
     { nome: 'nova-venda', caminho: '/admin/vendas/nova' },
     ...(pedido ? [{ nome: 'venda', caminho: `/admin/vendas/${pedido.id}` }] : []),
+    { nome: 'ingressos', caminho: '/admin/ingressos' },
+    ...(bilhete ? [{ nome: 'ingresso', caminho: `/admin/ingressos/${bilhete.id}` }] : []),
+    { nome: 'portaria', caminho: '/admin/portaria' },
     { nome: 'clientes', caminho: '/admin/clientes' },
     ...(cliente ? [{ nome: 'cliente', caminho: `/admin/clientes/${cliente.id}` }] : []),
     { nome: 'cupons', caminho: '/admin/cupons' },
     ...(cupom ? [{ nome: 'cupom', caminho: `/admin/cupons/${cupom.id}` }] : []),
-    { nome: 'ingressos', caminho: '/admin/ingressos' },
-    ...(ingresso ? [{ nome: 'ingresso', caminho: `/admin/ingressos/${ingresso.id}` }] : []),
+    { nome: 'tipos-de-ingresso', caminho: '/admin/tipos-de-ingresso' },
+    ...(ingresso ? [{ nome: 'tipo-de-ingresso', caminho: `/admin/tipos-de-ingresso/${ingresso.id}` }] : []),
     { nome: 'calendario', caminho: '/admin/calendario' },
     { nome: 'configuracoes', caminho: '/admin/configuracoes' },
   ];

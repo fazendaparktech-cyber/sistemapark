@@ -179,7 +179,7 @@ export function TicketTypeFormDialog({ ticketType }: { ticketType?: TicketTypeFo
       );
       setAberto(false);
       if (editando) router.refresh();
-      else router.push(`/admin/ingressos/${salvo.id}`);
+      else router.push(`/admin/tipos-de-ingresso/${salvo.id}`);
     } catch (falha) {
       if (falha instanceof ApiError && Object.keys(falha.fields).length > 0) {
         setCampos(falha.fields);

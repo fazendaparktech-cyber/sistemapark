@@ -11,11 +11,13 @@ import {
 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { BarList } from '@/components/admin/bar-list';
 import { ColumnChart } from '@/components/admin/charts/column-chart';
 import { SalesChart } from '@/components/admin/charts/sales-chart';
 import { KpiCard } from '@/components/admin/kpi-card';
+import { firstAllowedHref } from '@/components/admin/nav';
 import { PeriodFilter } from '@/components/admin/period-filter';
 import { SalesLink } from '@/components/admin/sales-link';
 import { ChannelBadge, OrderStatusBadge } from '@/components/admin/status-badges';
@@ -92,11 +94,14 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const saudacao = `${greetingFor(auth.park.timezone, agora)}, ${primeiroNome}`;
 
   if (!can(auth, 'dashboard.view')) {
+    // Quem não vê o dashboard (portaria, bilheteria) cai direto na primeira área liberada.
+    const destino = firstAllowedHref(auth.permissions);
+    if (destino && destino !== '/admin') redirect(destino);
     return (
       <PageHeader
         eyebrow={auth.park.name}
         title={saudacao}
-        description="O painel de vendas não faz parte do seu acesso. Use o menu para abrir as áreas liberadas para você."
+        description="Seu acesso ainda não inclui nenhuma área do painel. Fale com o administrador do parque."
       />
     );
   }
@@ -466,7 +471,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               />
               <CardContent className="grid gap-3">
                 <SalesLink url={`${env().APP_URL}/comprar`} />
-                <Link href="/admin/ingressos" className={cn(LINK, 'w-fit')}>
+                <Link href="/admin/tipos-de-ingresso" className={cn(LINK, 'w-fit')}>
                   Links por ingresso e campanha
                 </Link>
               </CardContent>

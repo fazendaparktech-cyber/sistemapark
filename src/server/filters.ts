@@ -3,9 +3,11 @@ import 'server-only';
 import { CUSTOMER_SORTS } from '@/lib/customers';
 import { isDateOnly, type DateOnly } from '@/lib/dates';
 import { FINANCIAL_STATUSES, ORDER_CHANNELS, PAYMENT_GROUPS, SALE_STATUSES } from '@/lib/orders';
+import { TICKET_FILTER_STATUSES } from '@/lib/tickets';
 
 import type { CustomerListFilters } from './customers/service';
 import type { OrderListFilters } from './orders/admin';
+import type { TicketFilters } from './tickets/search';
 
 /**
  * Filtros das listas lidos da URL (páginas e planilhas usam os mesmos).
@@ -54,6 +56,18 @@ export function parseCustomerFilters(parametros: SearchParamsRecord): CustomerLi
     q: texto(parametros.q),
     sort: umDe(CUSTOMER_SORTS, texto(parametros.ordem)),
     marketing: texto(parametros.comunicacoes) === 'sim' ? true : undefined,
+    page: pageParam(parametros.pagina),
+  };
+}
+
+export function parseTicketFilters(parametros: SearchParamsRecord): TicketFilters {
+  const tipo = texto(parametros.tipo, 36);
+  return {
+    q: texto(parametros.q),
+    status: umDe(TICKET_FILTER_STATUSES, texto(parametros.situacao)),
+    visitFrom: data(parametros.visitaDe),
+    visitTo: data(parametros.visitaAte),
+    ticketTypeId: tipo && /^[0-9a-f-]{36}$/i.test(tipo) ? tipo : undefined,
     page: pageParam(parametros.pagina),
   };
 }

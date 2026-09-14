@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
       { source: '/:path*', headers: cabecalhosDeSeguranca },
       {
         // A portaria precisa da câmera para ler os QR Codes.
-        source: '/portaria/:path*',
+        source: '/admin/portaria/:path*',
         headers: [
           {
             key: 'Permissions-Policy',
