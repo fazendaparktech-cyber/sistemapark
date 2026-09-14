@@ -221,7 +221,7 @@ export function AdminShell({
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <div className="sticky top-0 z-40 px-3 pt-3 sm:px-4 lg:pl-5 lg:pt-4">
+        <div className="sticky top-0 z-40 px-3 pt-3 sm:px-4 lg:hidden">
           <header className="flex h-16 items-center gap-3 rounded-2xl bg-white/90 px-3 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60 backdrop-blur sm:px-4">
             <div className="flex items-center gap-1.5 lg:hidden">
               <Gaveta.Root open={gavetaAberta} onOpenChange={setGavetaAberta}>
