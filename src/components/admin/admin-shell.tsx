@@ -3,7 +3,6 @@
 import {
   CalendarDays,
   ChevronDown,
-  ExternalLink,
   FileSpreadsheet,
   KeyRound,
   LayoutDashboard,
@@ -191,7 +190,6 @@ function MenuDaConta({ user }: { user: ShellUser }) {
 export function AdminShell({
   nav,
   parkName,
-  salesUrl,
   timeZone,
   canSearch,
   user,
@@ -199,8 +197,6 @@ export function AdminShell({
 }: {
   nav: AdminNavSection[];
   parkName: string;
-  /** Página pública de compra, aberta em outra aba. */
-  salesUrl: string;
   /** Fuso do parque, para as datas dos avisos. */
   timeZone: string;
   /** Busca do topo: aparece para quem vê clientes, vendas ou ingressos. */
@@ -209,6 +205,18 @@ export function AdminShell({
   children: ReactNode;
 }) {
   const [gavetaAberta, setGavetaAberta] = useState(false);
+  const pathname = usePathname();
+  // Página atual no topo: o item do menu que mais combina com o endereço.
+  const atual = nav
+    .flatMap((secao) =>
+      secao.items.map((item) => ({ secao: secao.label, pagina: item.label, href: item.href })),
+    )
+    .filter((item) =>
+      item.href === '/admin'
+        ? pathname === '/admin'
+        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
@@ -225,63 +233,61 @@ export function AdminShell({
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b border-ink-200/70 bg-canvas/85 px-4 backdrop-blur sm:px-6 lg:px-10">
-          <div className="flex items-center gap-1.5 lg:hidden">
-            <Gaveta.Root open={gavetaAberta} onOpenChange={setGavetaAberta}>
-              <Gaveta.Trigger
-                className="grid size-10 place-items-center rounded-xl text-ink-700 transition-colors hover:bg-ink-100"
-                aria-label="Abrir menu"
-              >
-                <Menu className="size-5" aria-hidden />
-              </Gaveta.Trigger>
-              <Gaveta.Portal>
-                <Gaveta.Overlay className="fixed inset-0 z-50 bg-ink-950/40 data-[state=open]:animate-fade-in" />
-                <Gaveta.Content
-                  aria-describedby={undefined}
-                  className="fixed inset-y-0 left-0 z-50 flex w-[min(86vw,300px)] flex-col bg-white px-4 py-5 shadow-pop data-[state=open]:animate-slide-in-left focus:outline-none"
+        <div className="sticky top-0 z-40 px-3 pt-3 sm:px-4 lg:pl-5 lg:pt-4">
+          <header className="flex h-16 items-center justify-between gap-3 rounded-2xl bg-white/90 px-3 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60 backdrop-blur sm:px-4">
+            <div className="flex items-center gap-1.5 lg:hidden">
+              <Gaveta.Root open={gavetaAberta} onOpenChange={setGavetaAberta}>
+                <Gaveta.Trigger
+                  className="grid size-10 place-items-center rounded-xl text-ink-700 transition-colors hover:bg-ink-100"
+                  aria-label="Abrir menu"
                 >
-                  <Gaveta.Title className="sr-only">Menu do painel</Gaveta.Title>
-                  <div className="flex items-center justify-between px-3">
-                    <Logo className="h-8" />
-                    <Gaveta.Close
-                      className="grid size-10 place-items-center rounded-xl text-ink-500 hover:bg-ink-100"
-                      aria-label="Fechar menu"
-                    >
-                      <X className="size-5" aria-hidden />
-                    </Gaveta.Close>
-                  </div>
-                  <div className="mt-8 flex-1 overflow-y-auto pl-1">
-                    <Navegacao nav={nav} onNavigate={() => setGavetaAberta(false)} />
-                  </div>
-                  <CartaoDoParque nome={parkName} />
-                </Gaveta.Content>
-              </Gaveta.Portal>
-            </Gaveta.Root>
-            <Link href="/admin" aria-label="Visão geral">
-              <Logo className="h-8" />
-            </Link>
-          </div>
+                  <Menu className="size-5" aria-hidden />
+                </Gaveta.Trigger>
+                <Gaveta.Portal>
+                  <Gaveta.Overlay className="fixed inset-0 z-50 bg-ink-950/40 data-[state=open]:animate-fade-in" />
+                  <Gaveta.Content
+                    aria-describedby={undefined}
+                    className="fixed inset-y-0 left-0 z-50 flex w-[min(86vw,300px)] flex-col bg-white px-4 py-5 shadow-pop data-[state=open]:animate-slide-in-left focus:outline-none"
+                  >
+                    <Gaveta.Title className="sr-only">Menu do painel</Gaveta.Title>
+                    <div className="flex items-center justify-between px-3">
+                      <Logo className="h-8" />
+                      <Gaveta.Close
+                        className="grid size-10 place-items-center rounded-xl text-ink-500 hover:bg-ink-100"
+                        aria-label="Fechar menu"
+                      >
+                        <X className="size-5" aria-hidden />
+                      </Gaveta.Close>
+                    </div>
+                    <div className="mt-8 flex-1 overflow-y-auto pl-1">
+                      <Navegacao nav={nav} onNavigate={() => setGavetaAberta(false)} />
+                    </div>
+                    <CartaoDoParque nome={parkName} />
+                  </Gaveta.Content>
+                </Gaveta.Portal>
+              </Gaveta.Root>
+              <Link href="/admin" aria-label="Visão geral">
+                <Logo className="h-8" />
+              </Link>
+            </div>
 
-          <p className="hidden truncate text-sm text-ink-500 lg:block">
-            Painel · <span className="font-semibold text-ink-800">{parkName}</span>
-          </p>
+            <div className="hidden min-w-0 lg:block">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+                {atual?.secao || parkName}
+              </p>
+              <p className="truncate font-display text-[17px] font-semibold tracking-[-0.01em] text-ink-900">
+                {atual?.pagina ?? 'Painel'}
+              </p>
+            </div>
 
-          <div className="flex items-center gap-1 sm:gap-2">
-            {canSearch ? <GlobalSearch /> : null}
-            <NotificationBell timeZone={timeZone} />
-            <a
-              href={salesUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-pool-800 transition-colors hover:bg-pool-50"
-            >
-              <ExternalLink className="size-4" aria-hidden />
-              <span className="hidden sm:inline">Página de vendas</span>
-              <span className="sr-only sm:hidden">Abrir a página de vendas</span>
-            </a>
-            <MenuDaConta user={user} />
-          </div>
-        </header>
+            <div className="flex items-center gap-1 sm:gap-2">
+              {canSearch ? <GlobalSearch /> : null}
+              <NotificationBell timeZone={timeZone} />
+              <span aria-hidden className="mx-1 hidden h-8 w-px bg-ink-200 sm:block" />
+              <MenuDaConta user={user} />
+            </div>
+          </header>
+        </div>
 
         <main
           id="conteudo"
