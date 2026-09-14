@@ -214,8 +214,8 @@ export function AdminShell({
     <div className="min-h-dvh lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-dvh py-4 pl-4 lg:block">
         <div className="flex h-full flex-col rounded-2xl bg-white px-3 py-5 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60">
-          <Link href="/admin" className="w-fit px-3">
-            <Logo className="h-8" />
+          <Link href="/admin" className="mx-auto w-fit">
+            <Logo className="h-10" />
           </Link>
           <div className="-mx-1 mt-7 flex-1 overflow-y-auto px-1">
             <Navegacao nav={nav} />
