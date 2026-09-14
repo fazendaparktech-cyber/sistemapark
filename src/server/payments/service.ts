@@ -16,6 +16,12 @@ import { env, isProduction } from '../env';
 import { AppError, Errors } from '../errors';
 import { logger } from '../logger';
 import { recordOrderTrackingEvent } from '../marketing/service';
+import {
+  alertAmountMismatch,
+  alertPaidAfterCancel,
+  alertPaidWithoutTickets,
+  reportEmailFailure,
+} from '../notifications/alerts';
 import { sendOrderConfirmedEmail } from '../orders/emails';
 import { isUniqueViolation } from '../prisma-errors';
 import type { RequestMeta } from '../request';
@@ -191,6 +197,7 @@ export async function confirmOrderPayment(
   if (pedido.status === 'CANCELLED') {
     await tx.order.update({ where: { id: orderId }, data: { financialStatus: 'PAID' } });
     await recordAudit(tx, { ...auditoria, action: 'orders.paid_after_cancel', data: { code: pedido.code } });
+    await alertPaidAfterCancel(tx, pedido);
     return { confirmed: false, lateConflict: true };
   }
 
@@ -212,6 +219,7 @@ export async function confirmOrderPayment(
         action: 'orders.late_payment_conflict',
         data: { code: pedido.code, people: pessoas, occupied: ocupadas, capacity: dia?.capacity ?? null },
       });
+      await alertPaidWithoutTickets(tx, pedido);
       return { confirmed: false, lateConflict: true };
     }
   }
@@ -301,6 +309,7 @@ export async function applyChargeSnapshot(
           entityId: paymentId,
           data: { expected: pagamento.amountCents, received: situacao.amountCents },
         });
+        await alertAmountMismatch(tx, pagamento, situacao.amountCents);
         return efeito;
       }
 
@@ -358,7 +367,7 @@ async function depoisDaConfirmacao(efeito: ChargeEffect, db: DbClient): Promise<
   if (!efeito.confirmedOrderId) return;
   const orderId = efeito.confirmedOrderId;
   await sendOrderConfirmedEmail(orderId, db).catch((erro: unknown) =>
-    logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de pedido confirmado'),
+    reportEmailFailure(db, orderId, 'CONFIRMED', erro),
   );
 }
 

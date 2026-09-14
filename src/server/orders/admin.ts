@@ -39,6 +39,7 @@ import { centsToCsv, toCsv } from '../csv';
 import { prisma, type DbClient } from '../db';
 import { AppError, Errors, fromZodError } from '../errors';
 import { logger } from '../logger';
+import { reportEmailFailure } from '../notifications/alerts';
 import { gatewayFor } from '../payments';
 import { paymentSimulationEnabled, simulateMockPayment } from '../payments/service';
 import { enforceRateLimit, rateLimitKey } from '../rate-limit';
@@ -651,7 +652,7 @@ export async function cancelOrder(
       );
   }
   await sendOrderCancelledEmail(orderId, null, db).catch((erro: unknown) =>
-    logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de cancelamento'),
+    reportEmailFailure(db, orderId, 'CANCELLED', erro),
   );
   return getOrderAdmin(auth, orderId, db);
 }
@@ -787,7 +788,7 @@ export async function refundOrder(
   );
 
   await sendOrderCancelledEmail(orderId, valor, db).catch((erro: unknown) =>
-    logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de reembolso'),
+    reportEmailFailure(db, orderId, 'REFUNDED', erro),
   );
   return getOrderAdmin(auth, orderId, db);
 }

@@ -22,6 +22,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       nav={navFor(auth.permissions)}
       parkName={auth.park.name}
       salesUrl={`${env().APP_URL}/comprar`}
+      timeZone={auth.park.timezone}
+      canSearch={(['customers.view', 'orders.view', 'tickets.view'] as const).some((permissao) =>
+        auth.permissions.has(permissao),
+      )}
       user={{
         name: auth.user.name,
         email: auth.user.email,

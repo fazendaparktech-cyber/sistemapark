@@ -33,7 +33,9 @@ import { useState, type ReactNode } from 'react';
 import { useLogout } from '../auth/logout-button';
 import { Logo } from '../brand/logo';
 import { cn } from '../ui/cn';
+import { GlobalSearch } from './global-search';
 import type { AdminIcon, AdminNavSection } from './nav';
+import { NotificationBell } from './notification-bell';
 
 const ICONES: Record<AdminIcon, LucideIcon> = {
   overview: LayoutDashboard,
@@ -194,6 +196,8 @@ export function AdminShell({
   nav,
   parkName,
   salesUrl,
+  timeZone,
+  canSearch,
   user,
   children,
 }: {
@@ -201,6 +205,10 @@ export function AdminShell({
   parkName: string;
   /** Página pública de compra, aberta em outra aba. */
   salesUrl: string;
+  /** Fuso do parque, para as datas dos avisos. */
+  timeZone: string;
+  /** Busca do topo: aparece para quem vê clientes, vendas ou ingressos. */
+  canSearch: boolean;
   user: ShellUser;
   children: ReactNode;
 }) {
@@ -260,7 +268,9 @@ export function AdminShell({
             Painel · <span className="font-semibold text-ink-800">{parkName}</span>
           </p>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            {canSearch ? <GlobalSearch /> : null}
+            <NotificationBell timeZone={timeZone} />
             <a
               href={salesUrl}
               target="_blank"

@@ -5,6 +5,7 @@ import type { PrismaClient } from '@/generated/prisma/client';
 import { recordAudit } from '../audit';
 import { prisma } from '../db';
 import { logger } from '../logger';
+import { reportEmailFailure } from '../notifications/alerts';
 import { sendOrderConfirmedEmail } from '../orders/emails';
 import { gatewayFor } from '../payments';
 import { applyChargeSnapshot } from '../payments/service';
@@ -152,7 +153,7 @@ async function recuperarPagamento(db: PrismaClient, orderId: string): Promise<bo
     if (efeito.confirmedOrderId) {
       const confirmado = efeito.confirmedOrderId;
       await sendOrderConfirmedEmail(confirmado, db).catch((erro: unknown) =>
-        logger.error({ err: erro, orderId: confirmado }, 'falha ao enviar e-mail de pedido confirmado'),
+        reportEmailFailure(db, confirmado, 'CONFIRMED', erro),
       );
     }
   }

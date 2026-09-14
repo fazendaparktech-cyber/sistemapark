@@ -23,6 +23,7 @@ import { onlinePaymentsAvailable } from '../env';
 import { AppError, fromZodError } from '../errors';
 import { logger } from '../logger';
 import { recordOrderTrackingEvent } from '../marketing/service';
+import { reportEmailFailure, reportPixFailure } from '../notifications/alerts';
 import { sendOrderConfirmedEmail, sendOrderReceivedEmail } from '../orders/emails';
 import type { PublicPark } from '../parks/public';
 import { ensurePixPayment } from '../payments/service';
@@ -526,17 +527,17 @@ export async function placeOnlineOrder(
     );
     if (transacao.free) {
       await sendOrderConfirmedEmail(orderId, db).catch((erro: unknown) =>
-        logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de pedido confirmado'),
+        reportEmailFailure(db, orderId, 'CONFIRMED', erro),
       );
     } else {
       try {
         await ensurePixPayment(orderId, { cpfDigits: dados.buyer.cpf }, db);
       } catch (erro) {
         // O pedido fica válido: a página do pedido oferece gerar o PIX de novo.
-        logger.error({ err: erro, orderId }, 'pedido criado sem cobrança PIX');
+        await reportPixFailure(db, orderId, erro);
       }
       await sendOrderReceivedEmail(orderId, db).catch((erro: unknown) =>
-        logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de pedido recebido'),
+        reportEmailFailure(db, orderId, 'RECEIVED', erro),
       );
     }
   }

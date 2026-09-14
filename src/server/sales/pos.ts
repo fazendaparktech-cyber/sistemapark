@@ -31,6 +31,7 @@ import { prisma, type DbClient, type Tx } from '../db';
 import { onlinePaymentsAvailable } from '../env';
 import { AppError, Errors, fromZodError, isAppError } from '../errors';
 import { logger } from '../logger';
+import { reportEmailFailure, reportPixFailure } from '../notifications/alerts';
 import { orderPublicUrl, sendOrderConfirmedEmail } from '../orders/emails';
 import { ensurePixPayment, paymentSimulationEnabled, simulateMockPayment } from '../payments/service';
 import { isUniqueViolation } from '../prisma-errors';
@@ -935,12 +936,12 @@ export async function placePosOrder(
     try {
       await ensurePixPayment(orderId, { cpfDigits: dados.buyer.cpf }, db);
     } catch (erro) {
-      logger.error({ err: erro, orderId }, 'venda no balcão sem cobrança PIX');
+      await reportPixFailure(db, orderId, erro);
       pixError = isAppError(erro) ? erro.message : 'Não foi possível gerar o PIX agora. Tente de novo.';
     }
   } else if (dados.buyer.email) {
-    emailSent = await sendOrderConfirmedEmail(orderId, db).catch((erro: unknown) => {
-      logger.error({ err: erro, orderId }, 'falha ao enviar e-mail da venda no balcão');
+    emailSent = await sendOrderConfirmedEmail(orderId, db).catch(async (erro: unknown) => {
+      await reportEmailFailure(db, orderId, 'CONFIRMED', erro);
       return false;
     });
   }
