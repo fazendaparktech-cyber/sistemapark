@@ -1,7 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { ALL_PERMISSIONS, defaultPermissionsFor, ROLE_KEYS } from '@/lib/access';
-import { listRoles, loadAccess, setRolePermissions, syncAccessCatalog } from '@/server/access/service';
+import {
+  listRoles,
+  loadAccess,
+  restoreDefaultRolePermissions,
+  setRolePermissions,
+  syncAccessCatalog,
+} from '@/server/access/service';
 import { prisma } from '@/server/db';
 
 import {
@@ -40,20 +46,52 @@ describe('sincronização do catálogo', () => {
       permissionsCreated: [],
       permissionsRemoved: [],
       rolesCreated: [],
+      rolesRemoved: [],
       grantsAdded: 0,
     });
   });
 
   it('preserva ajustes feitos pelo painel', async () => {
     await prisma.rolePermission.deleteMany({
-      where: { role: { key: 'MANAGER' }, permission: { key: 'orders.export' } },
+      where: { role: { key: 'MANAGER' }, permission: { key: 'reports.export' } },
     });
     await syncAccessCatalog();
-    expect(await permissoesNoBanco('MANAGER')).not.toContain('orders.export');
+    expect(await permissoesNoBanco('MANAGER')).not.toContain('reports.export');
 
     const gerente = await prisma.role.findUniqueOrThrow({ where: { key: 'MANAGER' } });
-    const permissao = await prisma.permission.findUniqueOrThrow({ where: { key: 'orders.export' } });
+    const permissao = await prisma.permission.findUniqueOrThrow({ where: { key: 'reports.export' } });
     await prisma.rolePermission.create({ data: { roleId: gerente.id, permissionId: permissao.id } });
+  });
+
+  it('apaga perfil que saiu do catálogo e não tem ninguém; com membros, fica sem conceder nada', async () => {
+    const vazio = await prisma.role.create({ data: { key: 'ANTIGO_VAZIO', name: 'Antigo vazio' } });
+    const comMembro = await prisma.role.create({ data: { key: 'ANTIGO_EM_USO', name: 'Antigo em uso' } });
+    const parque = await createPark();
+    const pessoa = await createUser({ parkId: parque.id, roles: ['GATE'] });
+    await prisma.userRole.create({ data: { userId: pessoa.id, parkId: parque.id, roleId: comMembro.id } });
+
+    const resumo = await syncAccessCatalog();
+    expect(resumo.rolesRemoved).toEqual(['ANTIGO_VAZIO']);
+    expect(await prisma.role.findUnique({ where: { id: vazio.id } })).toBeNull();
+    expect((await loadAccess(pessoa.id, parque.id)).roles).toEqual(['GATE']);
+
+    await prisma.userRole.deleteMany({ where: { roleId: comMembro.id } });
+    expect((await syncAccessCatalog()).rolesRemoved).toEqual(['ANTIGO_EM_USO']);
+  });
+
+  it('restaura as permissões padrão de um perfil', async () => {
+    await prisma.rolePermission.deleteMany({
+      where: { role: { key: 'GATE' }, permission: { key: 'checkin.monitor' } },
+    });
+    const papel = await prisma.role.findUniqueOrThrow({ where: { key: 'GATE' } });
+    const extra = await prisma.permission.findUniqueOrThrow({ where: { key: 'orders.view' } });
+    await prisma.rolePermission.create({ data: { roleId: papel.id, permissionId: extra.id } });
+
+    expect(await restoreDefaultRolePermissions(['GATE'])).toEqual([
+      { roleKey: 'GATE', added: ['checkin.monitor'], removed: ['orders.view'] },
+    ]);
+    expect(await permissoesNoBanco('GATE')).toEqual([...defaultPermissionsFor('GATE')].sort());
+    expect(await restoreDefaultRolePermissions(['GATE'])).toEqual([]);
   });
 });
 
@@ -66,6 +104,7 @@ describe('permissões efetivas', () => {
 
     expect([...(await loadAccess(porteiro.id, parque.id)).permissions].sort()).toEqual([
       'checkin.manual',
+      'checkin.monitor',
       'checkin.scan',
     ]);
 
@@ -93,23 +132,23 @@ describe('edição da matriz de permissões', () => {
     const parque = await createPark();
     const admin = await createUser({ parkId: parque.id, roles: ['ADMIN'] });
     const { auth } = await authAs(admin, parque.id);
-    const antes = await permissoesNoBanco('SUPPORT');
+    const antes = await permissoesNoBanco('BOX_OFFICE');
 
     try {
       const atualizado = await setRolePermissions(
         auth,
-        { roleKey: 'SUPPORT', permissions: [...antes, 'reports.view'] },
+        { roleKey: 'BOX_OFFICE', permissions: [...antes, 'reports.view'] },
         meta(),
       );
       expect(atualizado.permissions).toContain('reports.view');
 
-      const registro = await lastAudit('roles.permissions_changed', 'SUPPORT');
+      const registro = await lastAudit('roles.permissions_changed', 'BOX_OFFICE');
       expect(registro?.actorUserId).toBe(admin.id);
       expect(registro?.data).toMatchObject({ added: ['reports.view'], removed: [] });
     } finally {
-      await setRolePermissions(auth, { roleKey: 'SUPPORT', permissions: antes }, meta());
+      await setRolePermissions(auth, { roleKey: 'BOX_OFFICE', permissions: antes }, meta());
     }
-    expect(await permissoesNoBanco('SUPPORT')).toEqual(antes);
+    expect(await permissoesNoBanco('BOX_OFFICE')).toEqual(antes);
   });
 
   it('super admin não é editável', async () => {

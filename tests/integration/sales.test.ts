@@ -679,15 +679,16 @@ describe('painel: pedidos, clientes e indicadores', () => {
     expect(painel.series.reduce((soma, ponto) => soma + ponto.orders, 0)).toBe(1);
     expect(painel.byTicketType[0]).toMatchObject({ tickets: 2, revenueCents: 14000 });
 
-    const bilheteria = await createUser({ parkId: parque.id, roles: ['BOX_OFFICE'] });
-    const { auth: authBilheteria } = await authAs(bilheteria, parque.id);
-    const semFinanceiro = await getDashboard(authBilheteria, periodo);
-    expect(semFinanceiro.kpis.revenue).toBeNull();
-    expect(semFinanceiro.kpis.orders.value).toBe(1);
-
     const marketing = await createUser({ parkId: parque.id, roles: ['MARKETING'] });
     const { auth: authMarketing } = await authAs(marketing, parque.id);
+    const semFinanceiro = await getDashboard(authMarketing, periodo);
+    expect(semFinanceiro.kpis.revenue).toBeNull();
+    expect(semFinanceiro.kpis.orders.value).toBe(1);
     await expectAppError(listOrders(authMarketing), 'FORBIDDEN');
+
+    const bilheteria = await createUser({ parkId: parque.id, roles: ['BOX_OFFICE'] });
+    const { auth: authBilheteria } = await authAs(bilheteria, parque.id);
+    await expectAppError(getDashboard(authBilheteria, periodo), 'FORBIDDEN');
   });
 
   it('calendário não fecha dia que já tem ingresso vendido', async () => {

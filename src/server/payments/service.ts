@@ -461,7 +461,7 @@ export async function reconcilePayment(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<ChargeEffect> {
-  requirePermission(auth, 'payments.reconcile');
+  requirePermission(auth, 'finance.view');
   const pagamento = await db.payment.findFirst({ where: { id: paymentId, parkId: auth.park.id } });
   if (!pagamento?.providerPaymentId) throw Errors.notFound('Pagamento não encontrado.');
 

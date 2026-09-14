@@ -16,7 +16,7 @@ import { Checkbox, Field, fieldIds, Input, Textarea } from '../../ui/field';
 export interface EditableCustomer {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   birthDate: string | null;
   marketingOptIn: boolean;
@@ -27,7 +27,7 @@ export function EditCustomerDialog({ customer }: { customer: EditableCustomer })
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [nome, setNome] = useState(customer.name);
-  const [email, setEmail] = useState(customer.email);
+  const [email, setEmail] = useState(customer.email ?? '');
   const [telefone, setTelefone] = useState(customer.phone ? formatPhoneBR(customer.phone) : '');
   const [nascimento, setNascimento] = useState(customer.birthDate ?? '');
   const [comunicacoes, setComunicacoes] = useState(customer.marketingOptIn);
@@ -41,7 +41,7 @@ export function EditCustomerDialog({ customer }: { customer: EditableCustomer })
     setAberto(novo);
     if (novo) {
       setNome(customer.name);
-      setEmail(customer.email);
+      setEmail(customer.email ?? '');
       setTelefone(customer.phone ? formatPhoneBR(customer.phone) : '');
       setNascimento(customer.birthDate ?? '');
       setComunicacoes(customer.marketingOptIn);

@@ -5,6 +5,7 @@ import {
   PERMISSION_LABELS,
   PERMISSION_MODULE,
   ROLE_DEFINITIONS,
+  ROLE_KEYS,
   SUPER_ADMIN_ROLE,
   defaultPermissionsFor,
   isPermissionKey,
@@ -27,6 +28,7 @@ export interface AccessSyncSummary {
   permissionsCreated: PermissionKey[];
   permissionsRemoved: string[];
   rolesCreated: RoleKey[];
+  rolesRemoved: string[];
   grantsAdded: number;
 }
 
@@ -35,6 +37,8 @@ export interface AccessSyncSummary {
  *
  * - Permissão nova entra nos papéis cujo padrão a inclui.
  * - Papel novo nasce com as permissões padrão.
+ * - Papel que saiu do catálogo é apagado quando ninguém mais o usa; enquanto
+ *   houver membros, continua no banco mas não concede nada (`loadAccess`).
  * - Ajustes feitos pelo painel em permissões já existentes são preservados.
  * - Super admin sempre fica com tudo.
  */
@@ -56,6 +60,14 @@ export async function syncAccessCatalog(db: PrismaClient = prisma): Promise<Acce
         create: { key: chave, module: PERMISSION_MODULE[chave], description: PERMISSION_LABELS[chave] },
         update: { module: PERMISSION_MODULE[chave], description: PERMISSION_LABELS[chave] },
       });
+    }
+
+    const obsoletos = await tx.role.findMany({
+      where: { key: { notIn: [...ROLE_KEYS] }, userRoles: { none: {} } },
+      select: { id: true, key: true },
+    });
+    if (obsoletos.length > 0) {
+      await tx.role.deleteMany({ where: { id: { in: obsoletos.map((r) => r.id) } } });
     }
 
     const papeisAntes = new Set((await tx.role.findMany({ select: { key: true } })).map((r) => r.key));
@@ -101,8 +113,58 @@ export async function syncAccessCatalog(db: PrismaClient = prisma): Promise<Acce
       permissionsCreated: criadas,
       permissionsRemoved: removidas.map((p) => p.key),
       rolesCreated: papeisCriados,
+      rolesRemoved: obsoletos.map((r) => r.key).sort(),
       grantsAdded,
     };
+  });
+}
+
+export interface RoleRestoreResult {
+  roleKey: RoleKey;
+  added: PermissionKey[];
+  removed: string[];
+}
+
+/**
+ * Volta as permissões dos papéis ao padrão do catálogo, desfazendo ajustes do
+ * painel. Usado depois de uma revisão do catálogo (`npm run access:sync --
+ * --restaurar-padroes`). Devolve só os papéis que mudaram.
+ */
+export async function restoreDefaultRolePermissions(
+  roleKeys: readonly RoleKey[] = ROLE_KEYS,
+  db: PrismaClient = prisma,
+): Promise<RoleRestoreResult[]> {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('access_catalog_sync'))`;
+    const idDaPermissao = new Map(
+      (await tx.permission.findMany({ select: { id: true, key: true } })).map((p) => [p.key, p.id]),
+    );
+    const resultado: RoleRestoreResult[] = [];
+    for (const roleKey of roleKeys) {
+      const papel = await tx.role.findUnique({
+        where: { key: roleKey },
+        select: { id: true, permissions: { select: { permission: { select: { key: true } } } } },
+      });
+      if (!papel) continue;
+      const atuais = papel.permissions.map((rp) => rp.permission.key);
+      const padrao = defaultPermissionsFor(roleKey);
+      const added = padrao.filter((chave) => !atuais.includes(chave)).sort();
+      const removed = atuais.filter((chave) => !(padrao as readonly string[]).includes(chave)).sort();
+      if (added.length === 0 && removed.length === 0) continue;
+
+      if (removed.length > 0) {
+        await tx.rolePermission.deleteMany({
+          where: { roleId: papel.id, permission: { key: { in: removed } } },
+        });
+      }
+      const linhas = added.flatMap((chave) => {
+        const permissionId = idDaPermissao.get(chave);
+        return permissionId ? [{ roleId: papel.id, permissionId }] : [];
+      });
+      if (linhas.length > 0) await tx.rolePermission.createMany({ data: linhas, skipDuplicates: true });
+      resultado.push({ roleKey, added, removed });
+    }
+    return resultado;
   });
 }
 

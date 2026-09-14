@@ -117,7 +117,7 @@ export interface AdminOrderListItem {
   id: string;
   code: string;
   buyerName: string;
-  buyerEmail: string;
+  buyerEmail: string | null;
   status: OrderStatusKey;
   financialStatus: FinancialStatusKey;
   channel: OrderChannelKey;
@@ -226,7 +226,7 @@ export interface AdminOrderDetail {
   channel: OrderChannelKey;
   visitDate: DateOnly;
   day: { opensAt: string | null; closesAt: string | null; label: string | null };
-  buyer: { name: string; email: string; phone: string | null; cpfMasked: string | null };
+  buyer: { name: string; email: string | null; phone: string | null; cpfMasked: string | null };
   customer: { id: string; name: string } | null;
   subtotalCents: number;
   discountCents: number;
@@ -273,7 +273,7 @@ export interface AdminOrderDetail {
   }[];
   payments: {
     id: string;
-    provider: 'MOCK' | 'ASAAS';
+    provider: 'MOCK' | 'ASAAS' | 'MANUAL';
     method: PaymentMethodKey;
     status: PaymentStatusKey;
     amountCents: number;
@@ -468,10 +468,10 @@ export async function getOrderAdmin(
         !usados &&
         (pendente || (pedido.status === 'CONFIRMED' && pedido.financialStatus === 'NOT_APPLICABLE')),
       canRefund: can(auth, 'refunds.approve') && !usados && pedido.financialStatus === 'PAID' && aprovado,
-      canResend: can(auth, 'tickets.resend') && (pendente || pedido.status === 'CONFIRMED'),
+      canResend: can(auth, 'orders.resend') && (pendente || pedido.status === 'CONFIRMED'),
       canRegenerateLink: can(auth, 'tickets.manage'),
       canReconcile:
-        can(auth, 'payments.reconcile') &&
+        can(auth, 'finance.view') &&
         pedido.payments.some(
           (pagamento) =>
             pagamento.providerPaymentId &&
@@ -479,11 +479,11 @@ export async function getOrderAdmin(
         ),
       canSimulatePayment:
         paymentSimulationEnabled() &&
-        can(auth, 'payments.reconcile') &&
+        can(auth, 'finance.view') &&
         pendente &&
         pedido.payments.some((pagamento) => pagamento.provider === 'MOCK' && pagamento.status === 'AWAITING'),
     },
-    publicUrl: can(auth, 'tickets.resend') ? orderPublicUrl(pedido) : null,
+    publicUrl: can(auth, 'orders.resend') ? orderPublicUrl(pedido) : null,
     needsRefund: pedido.financialStatus === 'PAID' && pedido.status !== 'CONFIRMED',
   };
 }
@@ -732,12 +732,15 @@ export async function resendOrderEmail(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<void> {
-  requirePermission(auth, 'tickets.resend');
+  requirePermission(auth, 'orders.resend');
   const pedido = await db.order.findFirst({
     where: { id: orderId, parkId: auth.park.id },
     select: { id: true, code: true, status: true, expiresAt: true, buyerEmail: true },
   });
   if (!pedido) throw Errors.notFound('Pedido não encontrado.');
+  if (!pedido.buyerEmail) {
+    throw new AppError('CONFLICT', 'Este pedido não tem e-mail cadastrado. Envie os ingressos pelo WhatsApp.');
+  }
   await enforceRateLimit({ key: rateLimitKey('reenvio-pedido', orderId), limit: 5, windowSeconds: 3600 }, db);
 
   const status = effectiveOrderStatus(pedido);
@@ -816,7 +819,7 @@ export async function simulateOrderPayment(
   outcome: 'APPROVED' | 'DECLINED',
   db: PrismaClient = prisma,
 ): Promise<AdminOrderDetail> {
-  requirePermission(auth, 'payments.reconcile');
+  requirePermission(auth, 'finance.view');
   if (!paymentSimulationEnabled()) throw Errors.notFound();
   const pedido = await db.order.findFirst({
     where: { id: orderId, parkId: auth.park.id },
@@ -834,7 +837,7 @@ export async function exportOrdersCsv(
   meta: RequestMeta,
   db: DbClient = prisma,
 ): Promise<{ filename: string; content: string }> {
-  requirePermission(auth, 'orders.view', 'orders.export');
+  requirePermission(auth, 'orders.view', 'reports.export');
   const agora = new Date();
   const pedidos = await db.order.findMany({
     where: filtrosDoPedido(auth, filtros, agora),

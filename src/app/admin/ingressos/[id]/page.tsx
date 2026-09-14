@@ -76,7 +76,7 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
   }
 
   const podeEditar = can(auth, 'ticket_types.manage');
-  const podePrecificar = can(auth, 'prices.manage');
+  const podePrecificar = can(auth, 'ticket_types.manage');
   const linkDoIngresso = `${env().APP_URL}/comprar?ingresso=${tipo.slug}`;
 
   return (

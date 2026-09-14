@@ -323,7 +323,7 @@ describe('redefinição de senha por e-mail', () => {
 describe('troca de senha pela própria pessoa', () => {
   it('confere a senha atual, mantém a sessão atual e encerra as outras', async () => {
     const parque = await createPark();
-    const pessoa = await createUser({ parkId: parque.id, roles: ['SUPPORT'], mustChangePassword: true });
+    const pessoa = await createUser({ parkId: parque.id, roles: ['BOX_OFFICE'], mustChangePassword: true });
     const atual = await authAs(pessoa, parque.id);
     const outra = await authAs(pessoa, parque.id);
 

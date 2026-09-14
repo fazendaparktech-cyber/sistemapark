@@ -65,7 +65,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
         title="Pedidos"
         description="Compras do site e da bilheteria, com pagamento, ingressos e todo o histórico."
         actions={
-          can(auth, 'orders.export') ? (
+          can(auth, 'reports.export') ? (
             <a
               href={`/api/admin/orders/export${filtrosDaPlanilha ? `?${filtrosDaPlanilha}` : ''}`}
               className={buttonClasses('secondary')}
@@ -252,7 +252,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                     </TD>
                     <TD className="max-w-56">
                       <p className="truncate font-medium text-ink-900">{pedido.buyerName}</p>
-                      <p className="truncate text-xs text-ink-500">{pedido.buyerEmail}</p>
+                      <p className="truncate text-xs text-ink-500">{pedido.buyerEmail ?? 'Sem e-mail'}</p>
                     </TD>
                     <TD className="whitespace-nowrap">
                       <span className="text-ink-500">

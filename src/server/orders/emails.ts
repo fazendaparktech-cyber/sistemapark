@@ -63,12 +63,14 @@ function informacoes(pedido: PedidoParaEmail): OrderEmailInfo {
   };
 }
 
+/** Pedido sem e-mail (venda no balcão) não recebe nada: devolve `false`. */
 async function enviar(
-  para: string,
+  para: string | null,
   email: RenderedEmail,
   tag: string,
   idempotencyKey?: string,
-): Promise<void> {
+): Promise<boolean> {
+  if (!para) return false;
   await emailProvider().send({
     to: para,
     subject: email.subject,
@@ -77,6 +79,7 @@ async function enviar(
     tag,
     idempotencyKey,
   });
+  return true;
 }
 
 /** Ingressos liberados. Com `resend`, envia de novo mesmo que já tenha sido enviado. */
@@ -87,13 +90,12 @@ export async function sendOrderConfirmedEmail(
 ): Promise<boolean> {
   const pedido = await carregar(db, orderId);
   if (!pedido || pedido.status !== 'CONFIRMED') return false;
-  await enviar(
+  return enviar(
     pedido.buyerEmail,
     orderConfirmedEmail(informacoes(pedido)),
     'order_confirmed',
     options.resend ? undefined : `pedido-confirmado-${pedido.id}`,
   );
-  return true;
 }
 
 /** Pedido criado, aguardando o PIX. */
@@ -108,13 +110,12 @@ export async function sendOrderReceivedEmail(
   }
   const fuso = pedido.park.timezone;
   const payUntil = `as ${formatTimeBR(pedido.expiresAt, fuso)} do dia ${formatDateBR(dateOnlyOf(pedido.expiresAt, fuso))}`;
-  await enviar(
+  return enviar(
     pedido.buyerEmail,
     orderReceivedEmail({ ...informacoes(pedido), payUntil }),
     'order_received',
     options.resend ? undefined : `pedido-recebido-${pedido.id}`,
   );
-  return true;
 }
 
 export async function sendOrderCancelledEmail(
@@ -125,7 +126,7 @@ export async function sendOrderCancelledEmail(
   const pedido = await carregar(db, orderId);
   if (!pedido) return false;
   const info = informacoes(pedido);
-  await enviar(
+  return enviar(
     pedido.buyerEmail,
     orderCancelledEmail({
       parkName: info.parkName,
@@ -137,5 +138,4 @@ export async function sendOrderCancelledEmail(
     refundedCents ? 'order_refunded' : 'order_cancelled',
     `pedido-cancelado-${pedido.id}`,
   );
-  return true;
 }

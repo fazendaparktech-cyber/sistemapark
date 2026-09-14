@@ -34,7 +34,7 @@ export default async function IngressosPage() {
   if (!can(auth, 'ticket_types.view')) return <NoPermission />;
 
   const tipos = await listTicketTypesAdmin(auth);
-  const podeCriar = can(auth, 'ticket_types.manage') && can(auth, 'prices.manage');
+  const podeCriar = can(auth, 'ticket_types.manage');
   const podeOrdenar = can(auth, 'ticket_types.manage');
   const paginaDeCompra = `${env().APP_URL}/comprar`;
   const ativosNoSite = tipos.filter((tipo) => tipo.isActive && tipo.channels.includes('ONLINE'));

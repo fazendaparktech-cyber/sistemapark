@@ -50,7 +50,7 @@ export interface PublicOrderView {
   visitDateLong: string;
   day: { opensAt: string | null; closesAt: string | null; label: string | null };
   buyerName: string;
-  buyerEmailMasked: string;
+  buyerEmailMasked: string | null;
   items: {
     name: string;
     priceLabel: string | null;
@@ -80,7 +80,8 @@ export interface PublicOrderView {
   needsRefund: boolean;
 }
 
-function mascararEmail(email: string): string {
+function mascararEmail(email: string | null): string | null {
+  if (!email) return null;
   const [usuario = '', dominio = ''] = email.split('@');
   const visivel = usuario.slice(0, usuario.length > 3 ? 2 : 1);
   return `${visivel}${'*'.repeat(Math.max(3, usuario.length - visivel.length))}@${dominio}`;

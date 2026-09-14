@@ -201,13 +201,20 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
           <Card>
             <CardHeader title="Contato" />
             <CardContent className="grid gap-3 pt-3 text-sm">
-              <a
-                href={`mailto:${cliente.email}`}
-                className="flex items-center gap-2.5 break-all text-ink-700 hover:text-pool-800"
-              >
-                <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
-                {cliente.email}
-              </a>
+              {cliente.email ? (
+                <a
+                  href={`mailto:${cliente.email}`}
+                  className="flex items-center gap-2.5 break-all text-ink-700 hover:text-pool-800"
+                >
+                  <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
+                  {cliente.email}
+                </a>
+              ) : (
+                <p className="flex items-center gap-2.5 text-ink-500">
+                  <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
+                  Sem e-mail cadastrado
+                </p>
+              )}
               {cliente.phone ? (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <a

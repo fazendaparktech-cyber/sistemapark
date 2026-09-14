@@ -119,20 +119,20 @@ describe('alterações de acesso', () => {
     const { auth } = await authAs(admin, parque.id);
     const sessaoDaPessoa = await authAs(pessoa, parque.id);
 
-    const atualizada = await setUserRoles(auth, pessoa.id, ['SUPPORT', 'BOX_OFFICE'], meta());
-    expect(atualizada.roles.sort()).toEqual(['BOX_OFFICE', 'SUPPORT']);
+    const atualizada = await setUserRoles(auth, pessoa.id, ['MARKETING', 'BOX_OFFICE'], meta());
+    expect(atualizada.roles.sort()).toEqual(['BOX_OFFICE', 'MARKETING']);
     expect(await resolveSession(sessaoDaPessoa.token)).toBeNull();
 
     const registro = await lastAudit('users.roles_changed', pessoa.id);
     expect(registro?.before).toEqual({ roles: ['GATE'] });
-    expect(registro?.after).toEqual({ roles: ['BOX_OFFICE', 'SUPPORT'] });
+    expect(registro?.after).toEqual({ roles: ['BOX_OFFICE', 'MARKETING'] });
   });
 
   it('ninguém altera o próprio acesso', async () => {
     const parque = await createPark();
     const admin = await createUser({ parkId: parque.id, roles: ['ADMIN'] });
     const { auth } = await authAs(admin, parque.id);
-    await expectAppError(setUserRoles(auth, admin.id, ['READ_ONLY'], meta()), 'FORBIDDEN');
+    await expectAppError(setUserRoles(auth, admin.id, ['GATE'], meta()), 'FORBIDDEN');
     await expectAppError(setUserStatus(auth, admin.id, 'DISABLED', meta()), 'FORBIDDEN');
   });
 
@@ -200,7 +200,7 @@ describe('alterações de acesso', () => {
   it('edição de dados registra antes e depois', async () => {
     const parque = await createPark();
     const admin = await createUser({ parkId: parque.id, roles: ['ADMIN'] });
-    const pessoa = await createUser({ parkId: parque.id, roles: ['SUPPORT'], name: 'Carla Atendimento' });
+    const pessoa = await createUser({ parkId: parque.id, roles: ['BOX_OFFICE'], name: 'Carla Bilheteria' });
     const { auth } = await authAs(admin, parque.id);
 
     await updateUser(auth, pessoa.id, { name: 'Carla Souza', phone: '5573988887777' }, meta());
@@ -209,7 +209,7 @@ describe('alterações de acesso', () => {
     expect(detalhe.phone).toBe('5573988887777');
 
     const registro = await lastAudit('users.updated', pessoa.id);
-    expect(registro?.before).toMatchObject({ name: 'Carla Atendimento', phone: null });
+    expect(registro?.before).toMatchObject({ name: 'Carla Bilheteria', phone: null });
     expect(registro?.after).toMatchObject({ name: 'Carla Souza', phone: '5573988887777' });
   });
 

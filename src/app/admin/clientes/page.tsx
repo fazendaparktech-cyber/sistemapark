@@ -166,7 +166,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                         {formatBRL(cliente.totalSpentCents)}
                       </p>
                     </div>
-                    <p className="truncate text-[13px] text-ink-500">{cliente.email}</p>
+                    <p className="truncate text-[13px] text-ink-500">{cliente.email ?? 'Sem e-mail'}</p>
                     <p className="text-[13px] text-ink-500">
                       {formatNumber(cliente.ordersCount)} {cliente.ordersCount === 1 ? 'pedido' : 'pedidos'} ·{' '}
                       {visita(cliente.lastVisitDate, hoje)}
@@ -204,7 +204,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                       >
                         {cliente.name}
                       </Link>
-                      <p className="truncate text-xs text-ink-500">{cliente.email}</p>
+                      <p className="truncate text-xs text-ink-500">{cliente.email ?? 'Sem e-mail'}</p>
                     </TD>
                     <TD className="whitespace-nowrap text-ink-600">
                       {cliente.phone ? (

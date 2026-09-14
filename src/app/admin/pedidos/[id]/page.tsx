@@ -338,13 +338,20 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
                 <UserRound className="size-4 text-ink-400" aria-hidden />
                 {pedido.buyer.name}
               </p>
-              <a
-                href={`mailto:${pedido.buyer.email}`}
-                className="flex items-center gap-2.5 break-all text-ink-700 hover:text-pool-800"
-              >
-                <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
-                {pedido.buyer.email}
-              </a>
+              {pedido.buyer.email ? (
+                <a
+                  href={`mailto:${pedido.buyer.email}`}
+                  className="flex items-center gap-2.5 break-all text-ink-700 hover:text-pool-800"
+                >
+                  <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
+                  {pedido.buyer.email}
+                </a>
+              ) : (
+                <p className="flex items-center gap-2.5 text-ink-500">
+                  <Mail className="size-4 shrink-0 text-ink-400" aria-hidden />
+                  Sem e-mail cadastrado
+                </p>
+              )}
               {pedido.buyer.phone ? (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <a

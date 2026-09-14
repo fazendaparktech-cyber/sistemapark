@@ -17,7 +17,7 @@ export interface PixChargeInput {
   description: string;
   amountCents: number;
   expiresAt: Date;
-  payer: { name: string; email: string; phone: string | null; cpfDigits: string | null };
+  payer: { name: string; email: string | null; phone: string | null; cpfDigits: string | null };
   idempotencyKey: string;
 }
 

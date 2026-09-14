@@ -398,7 +398,7 @@ export async function createTicketType(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<AdminTicketType> {
-  requirePermission(auth, 'ticket_types.manage', 'prices.manage');
+  requirePermission(auth, 'ticket_types.manage');
   const parsed = ticketTypeInputSchema.safeParse(input);
   if (!parsed.success) throw fromZodError(parsed.error);
 
@@ -444,7 +444,7 @@ export async function updateTicketType(
   await db.$transaction(async (tx) => {
     const atual = await tx.ticketType.findFirst({ where: { id, parkId: auth.park.id } });
     if (!atual) throw Errors.notFound('Tipo de ingresso não encontrado.');
-    if (atual.basePriceCents !== parsed.data.basePriceCents) requirePermission(auth, 'prices.manage');
+    if (atual.basePriceCents !== parsed.data.basePriceCents) requirePermission(auth, 'ticket_types.manage');
 
     const dados = dadosDoTipo(parsed.data);
     const slug =
@@ -554,7 +554,7 @@ export async function createPriceRule(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<AdminTicketType> {
-  requirePermission(auth, 'prices.manage');
+  requirePermission(auth, 'ticket_types.manage');
   const parsed = priceRuleInputSchema.safeParse(input);
   if (!parsed.success) throw fromZodError(parsed.error);
 
@@ -587,7 +587,7 @@ export async function updatePriceRule(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<AdminTicketType> {
-  requirePermission(auth, 'prices.manage');
+  requirePermission(auth, 'ticket_types.manage');
   const parsed = priceRuleInputSchema.safeParse(input);
   if (!parsed.success) throw fromZodError(parsed.error);
 
@@ -618,7 +618,7 @@ export async function deletePriceRule(
   meta: RequestMeta,
   db: PrismaClient = prisma,
 ): Promise<AdminTicketType> {
-  requirePermission(auth, 'prices.manage');
+  requirePermission(auth, 'ticket_types.manage');
   const ticketTypeId = await db.$transaction(async (tx) => {
     const atual = await regraDoParque(tx, auth, ruleId);
     const usada = await tx.orderItem.count({ where: { ticketPriceId: ruleId } });

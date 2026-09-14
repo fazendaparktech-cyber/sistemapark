@@ -65,7 +65,9 @@ export default async function PedidoPublicoPage({
       icone: CircleCheck,
       tom: 'bg-success-50 text-success-700 ring-success-600/20',
       titulo: 'Pedido confirmado',
-      texto: `Seus ingressos estão abaixo e também foram enviados para ${pedido.buyerEmailMasked}.`,
+      texto: pedido.buyerEmailMasked
+        ? `Seus ingressos estão abaixo e também foram enviados para ${pedido.buyerEmailMasked}.`
+        : 'Seus ingressos estão abaixo.',
     },
     EXPIRED: {
       icone: Clock,

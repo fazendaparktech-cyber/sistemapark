@@ -42,7 +42,7 @@ export async function upsertCustomerByCpf(
   input: {
     parkId: string;
     name: string;
-    email: string;
+    email: string | null;
     phone: string | null;
     cpfDigits: string;
     marketingOptIn: boolean;
@@ -88,7 +88,7 @@ export async function upsertCustomerByCpf(
 export interface CustomerListItem {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   cpfMasked: string | null;
   marketingOptIn: boolean;
@@ -130,7 +130,7 @@ function interpretarBusca(q: string | undefined): Busca {
 interface LinhaDeCliente {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   cpf_masked: string | null;
   marketing_opt_in: boolean;
@@ -290,7 +290,7 @@ export interface CustomerOrderRow {
 export interface CustomerDetail {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   cpfMasked: string | null;
   birthDate: DateOnly | null;

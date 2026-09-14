@@ -18,38 +18,45 @@ datasource db {
 // ─── Parque ─────────────────────────────────────────────────────────────────
 
 model Park {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  slug            String   @unique @db.VarChar(60)
-  name            String   @db.VarChar(120)
-  legalName       String?  @map("legal_name") @db.VarChar(160)
-  cnpj            String?  @db.VarChar(14)
-  timezone        String   @default("America/Bahia") @db.VarChar(60)
-  orderCodePrefix String   @default("CP") @map("order_code_prefix") @db.VarChar(6)
-  email           String?  @db.VarChar(254)
-  phone           String?  @db.VarChar(13)
-  whatsapp        String?  @db.VarChar(13)
-  addressLine     String?  @map("address_line") @db.VarChar(200)
-  city            String?  @db.VarChar(80)
-  state           String?  @db.Char(2)
-  postalCode      String?  @map("postal_code") @db.VarChar(8)
-  isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id              String    @id @default(uuid(7)) @db.Uuid
+  slug            String    @unique @db.VarChar(60)
+  name            String    @db.VarChar(120)
+  legalName       String?   @map("legal_name") @db.VarChar(160)
+  cnpj            String?   @db.VarChar(14)
+  timezone        String    @default("America/Bahia") @db.VarChar(60)
+  orderCodePrefix String    @default("CP") @map("order_code_prefix") @db.VarChar(6)
+  email           String?   @db.VarChar(254)
+  phone           String?   @db.VarChar(13)
+  whatsapp        String?   @db.VarChar(13)
+  addressLine     String?   @map("address_line") @db.VarChar(200)
+  city            String?   @db.VarChar(80)
+  state           String?   @db.Char(2)
+  postalCode      String?   @map("postal_code") @db.VarChar(8)
+  /// Logo enviada pelo painel (PNG, JPEG ou WebP, até 300 KB).
+  logoMime        String?   @map("logo_mime") @db.VarChar(30)
+  logoData        Bytes?    @map("logo_data")
+  logoUpdatedAt   DateTime? @map("logo_updated_at") @db.Timestamptz(3)
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  userRoles      UserRole[]
-  sessions       Session[]
-  settings       SystemSetting[]
-  auditLogs      AuditLog[]
-  parkDays       ParkDay[]
-  ticketTypes    TicketType[]
-  customers      Customer[]
-  carts          Cart[]
-  capacityHolds  CapacityHold[]
-  orderSequences OrderSequence[]
-  orders         Order[]
-  tickets        Ticket[]
-  payments       Payment[]
-  coupons        Coupon[]
+  userRoles       UserRole[]
+  sessions        Session[]
+  settings        SystemSetting[]
+  auditLogs       AuditLog[]
+  parkDays        ParkDay[]
+  ticketTypes     TicketType[]
+  customers       Customer[]
+  carts           Cart[]
+  capacityHolds   CapacityHold[]
+  orderSequences  OrderSequence[]
+  orders          Order[]
+  tickets         Ticket[]
+  payments        Payment[]
+  coupons         Coupon[]
+  checkinAttempts CheckinAttempt[]
+  notifications   Notification[]
+  trackingEvents  TrackingEvent[]
 
   @@map("parks")
 }
@@ -96,6 +103,8 @@ model User {
   ticketEvents        TicketEvent[]
   createdPayments     Payment[]
   createdCoupons      Coupon[]
+  checkinAttempts     CheckinAttempt[]
+  notificationReads   NotificationRead[]
 
   @@index([status])
   @@map("users")
@@ -405,25 +414,38 @@ model TicketType {
 }
 
 /// Regra de preço: vence a de maior prioridade entre as que se aplicam à data.
+/// Origem da regra: as de tipo fixo são mantidas pelo formulário simples do
+/// ingresso (fim de semana, feriado, promoção) e pelo calendário (data especial).
+enum PriceRuleKind {
+  CUSTOM
+  WEEKEND
+  HOLIDAY
+  PROMO
+  SPECIAL_DATE
+
+  @@map("price_rule_kind")
+}
+
 model TicketPrice {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  ticketTypeId   String    @map("ticket_type_id") @db.Uuid
-  name           String    @db.VarChar(60)
-  priceCents     Int       @map("price_cents")
+  id             String        @id @default(uuid(7)) @db.Uuid
+  ticketTypeId   String        @map("ticket_type_id") @db.Uuid
+  kind           PriceRuleKind @default(CUSTOM)
+  name           String        @db.VarChar(60)
+  priceCents     Int           @map("price_cents")
   /// Preço "de" riscado na vitrine, quando há promoção.
-  compareAtCents Int?      @map("compare_at_cents")
+  compareAtCents Int?          @map("compare_at_cents")
   /// Vazio: vale para qualquer tipo de dia.
-  dayKinds       DayKind[] @default([]) @map("day_kinds")
-  visitFrom      DateTime? @map("visit_from") @db.Date
-  visitUntil     DateTime? @map("visit_until") @db.Date
-  saleStartsAt   DateTime? @map("sale_starts_at") @db.Timestamptz(3)
-  saleEndsAt     DateTime? @map("sale_ends_at") @db.Timestamptz(3)
+  dayKinds       DayKind[]     @default([]) @map("day_kinds")
+  visitFrom      DateTime?     @map("visit_from") @db.Date
+  visitUntil     DateTime?     @map("visit_until") @db.Date
+  saleStartsAt   DateTime?     @map("sale_starts_at") @db.Timestamptz(3)
+  saleEndsAt     DateTime?     @map("sale_ends_at") @db.Timestamptz(3)
   /// Lote: quantos ingressos podem ser vendidos com este preço.
-  lotQuantity    Int?      @map("lot_quantity")
-  priority       Int       @default(0)
-  isActive       Boolean   @default(true) @map("is_active")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lotQuantity    Int?          @map("lot_quantity")
+  priority       Int           @default(0)
+  isActive       Boolean       @default(true) @map("is_active")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   ticketType TicketType  @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
@@ -438,7 +460,8 @@ model Customer {
   id             String    @id @default(uuid(7)) @db.Uuid
   parkId         String    @map("park_id") @db.Uuid
   name           String    @db.VarChar(120)
-  email          String    @db.VarChar(254)
+  /// Vazio em cliente cadastrado no balcão sem e-mail.
+  email          String?   @db.VarChar(254)
   phone          String?   @db.VarChar(13)
   birthDate      DateTime? @map("birth_date") @db.Date
   /// HMAC do CPF (busca exata). O número completo não é gravado.
@@ -606,7 +629,8 @@ model Order {
   customerId      String?         @map("customer_id") @db.Uuid
   /// Contato usado nesta compra (o cadastro do cliente não é sobrescrito por compra anônima).
   buyerName       String          @map("buyer_name") @db.VarChar(120)
-  buyerEmail      String          @map("buyer_email") @db.VarChar(254)
+  /// Vazio em venda presencial sem e-mail informado.
+  buyerEmail      String?         @map("buyer_email") @db.VarChar(254)
   buyerPhone      String?         @map("buyer_phone") @db.VarChar(13)
   buyerCpfMasked  String?         @map("buyer_cpf_masked") @db.VarChar(14)
   parkDayId       String          @map("park_day_id") @db.Uuid
@@ -642,19 +666,20 @@ model Order {
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  park         Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  parkDay      ParkDay       @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
-  coupon       Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
-  soldBy       User?         @relation("OrderSoldBy", fields: [soldById], references: [id], onDelete: SetNull)
-  authorizedBy User?         @relation("OrderAuthorizedBy", fields: [authorizedById], references: [id], onDelete: SetNull)
-  cancelledBy  User?         @relation("OrderCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
-  items        OrderItem[]
-  tickets      Ticket[]
-  payments     Payment[]
-  hold         CapacityHold?
-  cart         Cart?
-  couponUsage  CouponUsage?
+  park           Park            @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  parkDay        ParkDay         @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  coupon         Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  soldBy         User?           @relation("OrderSoldBy", fields: [soldById], references: [id], onDelete: SetNull)
+  authorizedBy   User?           @relation("OrderAuthorizedBy", fields: [authorizedById], references: [id], onDelete: SetNull)
+  cancelledBy    User?           @relation("OrderCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  tickets        Ticket[]
+  payments       Payment[]
+  hold           CapacityHold?
+  cart           Cart?
+  couponUsage    CouponUsage?
+  trackingEvents TrackingEvent[]
 
   @@unique([parkId, code])
   @@index([parkId, createdAt(sort: Desc)])
@@ -729,14 +754,15 @@ model Ticket {
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  park        Park          @relation(fields: [parkId], references: [id], onDelete: Restrict)
-  order       Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  orderItem   OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
-  ticketType  TicketType    @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
-  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  parkDay     ParkDay       @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
-  checkedInBy User?         @relation("TicketCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
-  events      TicketEvent[]
+  park            Park             @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItem       OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  ticketType      TicketType       @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  parkDay         ParkDay          @relation(fields: [parkDayId], references: [id], onDelete: Restrict)
+  checkedInBy     User?            @relation("TicketCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  events          TicketEvent[]
+  checkinAttempts CheckinAttempt[]
 
   @@unique([parkId, code])
   @@index([orderId])
@@ -781,6 +807,8 @@ model TicketEvent {
 enum PaymentProvider {
   MOCK
   ASAAS
+  /// Recebido pela equipe no balcão (dinheiro ou maquininha), sem provedor online.
+  MANUAL
 
   @@map("payment_provider")
 }
@@ -998,4 +1026,148 @@ model CouponUsage {
   @@index([couponId, status])
   @@index([cpfHash])
   @@map("coupon_usages")
+}
+
+// ─── Portaria ───────────────────────────────────────────────────────────────
+
+enum CheckinMethod {
+  QR
+  MANUAL
+
+  @@map("checkin_method")
+}
+
+enum CheckinResult {
+  ALLOWED
+  DENIED
+
+  @@map("checkin_result")
+}
+
+enum CheckinReason {
+  ALREADY_USED
+  CANCELLED
+  REFUNDED
+  PENDING_PAYMENT
+  EXPIRED
+  WRONG_DATE
+  NOT_FOUND
+  INVALID_QR
+
+  @@map("checkin_reason")
+}
+
+/// Toda tentativa de entrada, liberada ou negada. Somente-inclusão.
+model CheckinAttempt {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  parkId    String         @map("park_id") @db.Uuid
+  ticketId  String?        @map("ticket_id") @db.Uuid
+  userId    String?        @map("user_id") @db.Uuid
+  method    CheckinMethod
+  result    CheckinResult
+  reason    CheckinReason?
+  /// Código lido ou digitado (sem a assinatura do QR).
+  codeTried String?        @map("code_tried") @db.VarChar(40)
+  device    String?        @db.VarChar(120)
+  ip        String?        @db.VarChar(45)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  park   Park    @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([parkId, createdAt(sort: Desc)])
+  @@index([ticketId, createdAt])
+  @@map("checkin_attempts")
+}
+
+// ─── Notificações ───────────────────────────────────────────────────────────
+
+enum NotificationType {
+  CAPACITY
+  PAYMENT_PROBLEM
+  TICKET_EMISSION
+  EMAIL_FAILURE
+  WHATSAPP_FAILURE
+  DUPLICATE_CHECKIN
+
+  @@map("notification_type")
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+
+  @@map("notification_severity")
+}
+
+model Notification {
+  id         String               @id @default(uuid(7)) @db.Uuid
+  parkId     String               @map("park_id") @db.Uuid
+  type       NotificationType
+  severity   NotificationSeverity
+  title      String               @db.VarChar(160)
+  body       String               @db.VarChar(500)
+  href       String?              @db.VarChar(300)
+  /// Permissão necessária para ver o alerta.
+  permission String               @db.VarChar(60)
+  /// Evita repetir o mesmo alerta (ex.: lotação de um dia em 90%).
+  dedupeKey  String               @map("dedupe_key") @db.VarChar(160)
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  park  Park               @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  reads NotificationRead[]
+
+  @@unique([parkId, dedupeKey])
+  @@index([parkId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model NotificationRead {
+  notificationId String   @map("notification_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  readAt         DateTime @default(now()) @map("read_at") @db.Timestamptz(3)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId])
+  @@map("notification_reads")
+}
+
+// ─── Rastreamento ───────────────────────────────────────────────────────────
+
+enum TrackingEventType {
+  VIEW_TICKETS
+  CHECKOUT_STARTED
+  PAYMENT_STARTED
+  PURCHASE
+
+  @@map("tracking_event_type")
+}
+
+/// Etapas do funil de compra do site, com a origem (UTM) da visita.
+model TrackingEvent {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  parkId      String            @map("park_id") @db.Uuid
+  type        TrackingEventType
+  /// Identificador aleatório do navegador (sem dado pessoal).
+  visitorId   String?           @map("visitor_id") @db.VarChar(40)
+  orderId     String?           @map("order_id") @db.Uuid
+  valueCents  Int?              @map("value_cents")
+  utmSource   String?           @map("utm_source") @db.VarChar(100)
+  utmMedium   String?           @map("utm_medium") @db.VarChar(100)
+  utmCampaign String?           @map("utm_campaign") @db.VarChar(100)
+  utmContent  String?           @map("utm_content") @db.VarChar(100)
+  referrer    String?           @db.VarChar(300)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  park  Park   @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([parkId, type, createdAt])
+  @@index([orderId])
+  @@map("tracking_events")
 }

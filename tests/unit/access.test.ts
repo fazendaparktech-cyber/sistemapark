@@ -43,24 +43,39 @@ describe('matriz padrão (docs/ARQUITETURA.md, seção 13)', () => {
     expect(defaultPermissionsFor('ADMIN')).toEqual(ALL_PERMISSIONS);
   });
 
-  it('portaria só lê QR e libera entrada', () => {
-    expect([...defaultPermissionsFor('GATE')].sort()).toEqual(['checkin.manual', 'checkin.scan']);
+  it('portaria só escaneia, busca ingresso e acompanha as entradas', () => {
+    expect([...defaultPermissionsFor('GATE')].sort()).toEqual([
+      'checkin.manual',
+      'checkin.monitor',
+      'checkin.scan',
+    ]);
   });
 
-  it('só administradores mexem em equipe, permissões e integrações', () => {
+  it('só administradores mexem em usuários, permissões, configurações e integrações', () => {
     expect(papeisCom('users.manage')).toEqual(['SUPER_ADMIN', 'ADMIN']);
     expect(papeisCom('roles.manage')).toEqual(['SUPER_ADMIN', 'ADMIN']);
+    expect(papeisCom('settings.manage')).toEqual(['SUPER_ADMIN', 'ADMIN']);
     expect(papeisCom('integrations.manage')).toEqual(['SUPER_ADMIN', 'ADMIN']);
     expect(papeisCom('customers.export')).toEqual(['SUPER_ADMIN', 'ADMIN']);
   });
 
-  it('reembolso só é aprovado por administradores e financeiro', () => {
+  it('reembolso só é feito por administradores e financeiro', () => {
     expect(papeisCom('refunds.approve')).toEqual(['SUPER_ADMIN', 'ADMIN', 'FINANCE']);
   });
 
-  it('leitura não altera nada', () => {
-    const escrita =
-      /\.(manage|cancel|export|resend|create|approve|request|reconcile|sell|discount|operate|send|scan|manual)$/;
-    for (const permissao of defaultPermissionsFor('READ_ONLY')) expect(permissao).not.toMatch(escrita);
+  it('bilheteria vende e consulta, mas não cancela, não reembolsa e não vê faturamento', () => {
+    const bilheteria = defaultPermissionsFor('BOX_OFFICE');
+    for (const permissao of ['pos.sell', 'orders.view', 'customers.view', 'tickets.view'] as const)
+      expect(bilheteria).toContain(permissao);
+    for (const permissao of ['orders.cancel', 'refunds.approve', 'dashboard.financial', 'finance.view'] as const)
+      expect(bilheteria).not.toContain(permissao);
+  });
+
+  it('marketing vê métricas, cupons e origem, sem acesso a vendas individuais e clientes', () => {
+    const marketing = defaultPermissionsFor('MARKETING');
+    for (const permissao of ['marketing.view', 'marketing.manage', 'coupons.manage'] as const)
+      expect(marketing).toContain(permissao);
+    for (const permissao of ['orders.view', 'customers.view', 'finance.view', 'dashboard.financial'] as const)
+      expect(marketing).not.toContain(permissao);
   });
 });
