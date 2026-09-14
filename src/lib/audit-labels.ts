@@ -52,6 +52,9 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'settings.sales_updated': 'Alterou as regras de venda online',
   'settings.policies_updated': 'Alterou as políticas do site',
   'settings.park_updated': 'Alterou os dados do parque',
+  'settings.operations_updated': 'Alterou o funcionamento padrão',
+  'settings.logo_updated': 'Enviou a logo do parque',
+  'settings.logo_removed': 'Removeu a logo do parque',
 };
 
 export const AUDIT_REASON_LABELS: Readonly<Record<string, string>> = {

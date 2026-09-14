@@ -12,7 +12,7 @@ import { Alert } from '../../ui/alert';
 import { Button } from '../../ui/button';
 import { Checkbox, Field, fieldIds, Input, Textarea } from '../../ui/field';
 
-function Rodape({
+export function Rodape({
   enviando,
   podeSalvar,
   children,
@@ -35,7 +35,7 @@ function Rodape({
   );
 }
 
-function useEnvio<T>(caminho: string, sucesso: string) {
+export function useEnvio<T>(caminho: string, sucesso: string) {
   const router = useRouter();
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);

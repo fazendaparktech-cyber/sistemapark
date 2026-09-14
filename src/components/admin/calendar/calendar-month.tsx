@@ -40,6 +40,8 @@ export interface DayDefaults {
   opensAt: string;
   closesAt: string;
   capacity: number;
+  /** Dias da semana já marcados ao abrir um período. */
+  weekdays?: number[];
 }
 
 const TIPOS_MANUAIS: DayKind[] = ['HOLIDAY', 'EVENT', 'SPECIAL'];
@@ -405,7 +407,7 @@ export function PeriodDialog({
   const [aberto, setAberto] = useState(false);
   const [de, setDe] = useState(initialFrom);
   const [ate, setAte] = useState(initialTo);
-  const [dias, setDias] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+  const [dias, setDias] = useState<number[]>(defaults.weekdays ?? [0, 1, 2, 3, 4, 5, 6]);
   const [status, setStatus] = useState<'OPEN' | 'CLOSED'>('OPEN');
   const [abre, setAbre] = useState(defaults.opensAt);
   const [fecha, setFecha] = useState(defaults.closesAt);

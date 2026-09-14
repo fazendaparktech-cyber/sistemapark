@@ -8,16 +8,20 @@ import { TrackingScripts } from '@/components/site/tracking-scripts';
 import { todayIn } from '@/lib/dates';
 import { isAppError } from '@/server/errors';
 import { getPublicPark } from '@/server/parks/public';
-import { getMarketingSettings, getParkProfile } from '@/server/settings/service';
+import { getMarketingSettings, getParkLogoVersion, getParkProfile } from '@/server/settings/service';
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
   const parque = await getPublicPark().catch((erro: unknown) => {
     if (isAppError(erro)) return null;
     throw erro;
   });
-  const [perfil, pixels] = parque
-    ? await Promise.all([getParkProfile(parque.id), getMarketingSettings(parque.id)])
-    : [null, null];
+  const [perfil, pixels, versaoDaLogo] = parque
+    ? await Promise.all([
+        getParkProfile(parque.id),
+        getMarketingSettings(parque.id),
+        getParkLogoVersion(parque.id),
+      ])
+    : [null, null, null];
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
@@ -28,7 +32,10 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
       >
         Pular para o conteúdo
       </a>
-      <SiteHeader />
+      <SiteHeader
+        logoUrl={versaoDaLogo ? `/api/public/park-logo?v=${versaoDaLogo}` : null}
+        parkName={parque?.name}
+      />
       <main id="conteudo" className="flex-1">
         {children}
       </main>

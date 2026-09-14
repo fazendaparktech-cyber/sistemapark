@@ -165,3 +165,43 @@ Os dados ficam em ambiente protegido, com acesso restrito à equipe autorizada e
 6. Seus direitos
 Você pode pedir acesso, correção ou exclusão dos seus dados, e revogar autorizações, pelos canais de atendimento do parque.`,
 };
+
+// ─── Funcionamento ──────────────────────────────────────────────────────────
+
+export const operationsSettingsSchema = z
+  .strictObject({
+    openWeekdays: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, 'Escolha ao menos um dia da semana')
+      .transform((dias) => [...new Set(dias)].sort()),
+    opensAt: z.string().regex(HORA, 'Use o formato HH:MM'),
+    closesAt: z.string().regex(HORA, 'Use o formato HH:MM'),
+    capacity: z.number().int().min(1, 'Mínimo de 1 pessoa').max(100_000, 'Capacidade muito alta'),
+  })
+  .superRefine((valores, ctx) => {
+    if (valores.opensAt >= valores.closesAt) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['closesAt'],
+        message: 'O fechamento precisa ser depois da abertura',
+      });
+    }
+  });
+
+export type OperationsSettings = z.output<typeof operationsSettingsSchema>;
+
+export const DEFAULT_OPERATIONS_SETTINGS: OperationsSettings = {
+  openWeekdays: [0, 6],
+  opensAt: '09:00',
+  closesAt: '17:00',
+  capacity: 1000,
+};
+
+// ─── Logo ───────────────────────────────────────────────────────────────────
+
+export const PARK_LOGO_MAX_BYTES = 300_000;
+
+/** Imagem em data URL (base64). O servidor confere o tipo pelos bytes, não pelo nome. */
+export const parkLogoSchema = z.strictObject({
+  dataUrl: z.string().max(450_000, 'A imagem passa de 300 KB'),
+});

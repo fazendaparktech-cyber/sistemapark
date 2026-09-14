@@ -14,6 +14,7 @@ import { can } from '@/server/auth/context';
 import { requirePageAuth } from '@/server/auth/guards';
 import { getCalendarRange, specialPriceDates } from '@/server/calendar/service';
 import type { SearchParamsRecord } from '@/server/filters';
+import { getOperationsSettings } from '@/server/settings/service';
 
 export const metadata: Metadata = { title: 'Calendário' };
 
@@ -38,9 +39,10 @@ export default async function CalendarioPage({
   const inicio = `${mes}-01`;
   const fim = addDays(`${mesDeslocado(mes, 1)}-01`, -1);
 
-  const [dias, datasComPrecoEspecial] = await Promise.all([
+  const [dias, datasComPrecoEspecial, funcionamento] = await Promise.all([
     getCalendarRange(auth.park.id, inicio, fim),
     specialPriceDates(auth.park.id, inicio, fim),
+    getOperationsSettings(auth.park.id),
   ]);
   const abertos = dias.filter((dia) => dia.status === 'OPEN');
   const lotacao = abertos.reduce((soma, dia) => soma + (dia.capacity ?? 0), 0);
@@ -48,12 +50,12 @@ export default async function CalendarioPage({
   const fechados = dias.filter((dia) => dia.status === 'CLOSED').length;
   const semConfiguracao = dias.filter((dia) => !dia.configured).length;
 
-  // Valores iniciais dos formulários: os do último dia aberto configurado, ou um padrão.
-  const referencia = [...abertos].reverse()[0];
+  // Valores iniciais dos formulários: o funcionamento padrão definido em Configurações.
   const padrao = {
-    opensAt: referencia?.opensAt ?? '09:00',
-    closesAt: referencia?.closesAt ?? '17:00',
-    capacity: referencia?.capacity ?? 1000,
+    opensAt: funcionamento.opensAt,
+    closesAt: funcionamento.closesAt,
+    capacity: funcionamento.capacity,
+    weekdays: funcionamento.openWeekdays,
   };
   const podeGerenciar = can(auth, 'calendar.manage');
 
