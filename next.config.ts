@@ -23,6 +23,11 @@ const nextConfig: NextConfig = {
       // Endereços antigos do painel (links salvos e e-mails internos).
       { source: '/admin/pedidos', destination: '/admin/vendas', permanent: true },
       { source: '/admin/pedidos/:id', destination: '/admin/vendas/:id', permanent: true },
+      // Equipe, Permissões e Auditoria viraram as abas de Usuários.
+      { source: '/admin/equipe', destination: '/admin/usuarios', permanent: true },
+      { source: '/admin/equipe/:id', destination: '/admin/usuarios/:id', permanent: true },
+      { source: '/admin/permissoes', destination: '/admin/usuarios?aba=perfis', permanent: true },
+      { source: '/admin/auditoria', destination: '/admin/usuarios?aba=atividade', permanent: true },
     ];
   },
   async headers() {

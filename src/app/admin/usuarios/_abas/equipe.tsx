@@ -1,28 +1,21 @@
 import { ChevronRight, Search, Users } from 'lucide-react';
-import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { NoPermission } from '@/components/admin/no-permission';
-import { CreateUserDialog } from '@/components/admin/team/create-user-dialog';
 import { StaffStatusBadge } from '@/components/admin/team/staff-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { Input, Select } from '@/components/ui/field';
-import { PageHeader } from '@/components/ui/page-header';
 import { Pagination } from '@/components/ui/pagination';
 import { Table, TableContainer, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import type { UserStatus } from '@/generated/prisma/enums';
 import { isRoleKey, ROLE_DEFINITIONS, roleDefinition, SUPER_ADMIN_ROLE } from '@/lib/access';
 import { formatDateTimeBR } from '@/lib/dates';
 import { formatRelativeTime } from '@/lib/relative-time';
-import type { UserStatus } from '@/generated/prisma/enums';
-import { listRoles } from '@/server/access/service';
-import { can } from '@/server/auth/context';
-import { requirePageAuth } from '@/server/auth/guards';
+import type { AuthContext } from '@/server/auth/context';
+import type { SearchParamsRecord } from '@/server/filters';
 import { listUsers } from '@/server/users/service';
-
-export const metadata: Metadata = { title: 'Equipe' };
 
 const SITUACOES: { value: UserStatus; label: string }[] = [
   { value: 'ACTIVE', label: 'Ativos' },
@@ -34,11 +27,8 @@ function texto(valor: string | string[] | undefined): string | undefined {
   return typeof valor === 'string' && valor.trim() ? valor.trim() : undefined;
 }
 
-export default async function EquipePage({ searchParams }: PageProps<'/admin/equipe'>) {
-  const auth = await requirePageAuth();
-  if (!can(auth, 'users.view')) return <NoPermission />;
-
-  const parametros = await searchParams;
+/** Aba Equipe: quem acessa o sistema, com filtros por nome, situação e perfil. */
+export async function AbaEquipe({ auth, parametros }: { auth: AuthContext; parametros: SearchParamsRecord }) {
   const q = texto(parametros.q)?.slice(0, 100);
   const statusBruto = texto(parametros.status);
   const status = SITUACOES.some((s) => s.value === statusBruto) ? (statusBruto as UserStatus) : undefined;
@@ -46,18 +36,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
   const role = papelBruto && isRoleKey(papelBruto) ? papelBruto : undefined;
   const page = Math.max(1, Math.min(10_000, Number(texto(parametros.page)) || 1));
 
-  const [resultado, papeis] = await Promise.all([
-    listUsers(auth, { q, status, role, page }),
-    listRoles(auth),
-  ]);
-
-  const podeGerenciar = can(auth, 'users.manage');
-  const papeisAtribuiveis = papeis
-    .filter((papel) => papel.key !== SUPER_ADMIN_ROLE || auth.isSuperAdmin)
-    .filter(
-      (papel) => auth.isSuperAdmin || papel.permissions.every((permissao) => auth.permissions.has(permissao)),
-    )
-    .map((papel) => ({ key: papel.key, name: papel.name, description: papel.description }));
+  const resultado = await listUsers(auth, { q, status, role, page });
 
   const filtrando = Boolean(q || status || role);
   const hrefPagina = (pagina: number) => {
@@ -67,17 +46,11 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
     if (role) busca.set('role', role);
     if (pagina > 1) busca.set('page', String(pagina));
     const consulta = busca.toString();
-    return consulta ? `/admin/equipe?${consulta}` : '/admin/equipe';
+    return consulta ? `/admin/usuarios?${consulta}` : '/admin/usuarios';
   };
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title="Equipe"
-        description="Quem acessa o sistema, com qual papel, e quando entrou pela última vez."
-        actions={podeGerenciar ? <CreateUserDialog roleOptions={papeisAtribuiveis} /> : null}
-      />
-
+    <>
       <form role="search" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_200px_auto]">
         <div className="relative">
           <Search
@@ -100,8 +73,8 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
             </option>
           ))}
         </Select>
-        <Select name="role" defaultValue={role ?? ''} aria-label="Papel">
-          <option value="">Todos os papéis</option>
+        <Select name="role" defaultValue={role ?? ''} aria-label="Perfil">
+          <option value="">Todos os perfis</option>
           {ROLE_DEFINITIONS.map((papel) => (
             <option key={papel.key} value={papel.key}>
               {papel.name}
@@ -126,7 +99,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
             action={
               filtrando ? (
                 <Link
-                  href="/admin/equipe"
+                  href="/admin/usuarios"
                   className="text-sm font-semibold text-pool-700 hover:text-pool-800"
                 >
                   Limpar filtros
@@ -142,7 +115,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
             {resultado.items.map((pessoa) => (
               <li key={pessoa.id}>
                 <Link
-                  href={`/admin/equipe/${pessoa.id}`}
+                  href={`/admin/usuarios/${pessoa.id}`}
                   className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-card ring-1 ring-ink-200/70 active:bg-ink-50"
                 >
                   <div className="min-w-0 flex-1">
@@ -167,7 +140,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
               <THead>
                 <tr>
                   <TH>Pessoa</TH>
-                  <TH>Papéis</TH>
+                  <TH>Perfis</TH>
                   <TH>Situação</TH>
                   <TH>Último acesso</TH>
                   <TH className="w-10">
@@ -180,7 +153,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
                   <TR key={pessoa.id} className="hover:bg-pool-50/40">
                     <TD>
                       <Link
-                        href={`/admin/equipe/${pessoa.id}`}
+                        href={`/admin/usuarios/${pessoa.id}`}
                         className="font-semibold text-ink-900 hover:text-pool-800"
                       >
                         {pessoa.name}
@@ -218,7 +191,7 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
                     </TD>
                     <TD>
                       <Link
-                        href={`/admin/equipe/${pessoa.id}`}
+                        href={`/admin/usuarios/${pessoa.id}`}
                         className="grid size-8 place-items-center rounded-lg text-ink-400 hover:bg-ink-100 hover:text-ink-700"
                         aria-label={`Abrir ${pessoa.name}`}
                       >
@@ -239,6 +212,6 @@ export default async function EquipePage({ searchParams }: PageProps<'/admin/equ
           />
         </>
       )}
-    </div>
+    </>
   );
 }

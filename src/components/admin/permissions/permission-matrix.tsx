@@ -1,11 +1,17 @@
 'use client';
 
-import { Check, Lock, Minus, Table2, Users } from 'lucide-react';
+import { Check, Lock, Minus, RotateCcw, Table2, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { PERMISSION_GROUPS, PERMISSION_LABELS, type PermissionKey, type RoleKey } from '@/lib/access';
+import {
+  defaultPermissionsFor,
+  PERMISSION_GROUPS,
+  PERMISSION_LABELS,
+  type PermissionKey,
+  type RoleKey,
+} from '@/lib/access';
 import { api, errorMessage } from '@/lib/api-client';
 
 import { Alert } from '../../ui/alert';
@@ -53,6 +59,9 @@ export function PermissionMatrix({
   const retiradas = papelAtual.permissions.filter((chave) => !conjuntoAtual.has(chave));
   const alterado = adicionadas.length + retiradas.length > 0;
   const editavel = canEdit && papelAtual.editable;
+  const padrao: readonly PermissionKey[] = defaultPermissionsFor(papelAtual.key);
+  const igualAoPadrao =
+    padrao.length === conjuntoAtual.size && padrao.every((chave) => conjuntoAtual.has(chave));
 
   function alternar(chave: PermissionKey, marcado: boolean) {
     const novo = marcado ? [...atual, chave] : atual.filter((item) => item !== chave);
@@ -65,6 +74,11 @@ export function PermissionMatrix({
       delete copia[papelAtual.key];
       return copia;
     });
+  }
+
+  /** Coloca as permissões de fábrica do perfil no rascunho; a pessoa confere e salva. */
+  function restaurarPadrao() {
+    setRascunhos((anteriores) => ({ ...anteriores, [papelAtual.key]: [...padrao] }));
   }
 
   async function salvar() {
@@ -194,6 +208,11 @@ export function PermissionMatrix({
                   {papelAtual.name}
                 </h2>
                 {!papelAtual.editable ? <Badge tone="grape">Acesso total fixo</Badge> : null}
+                {editavel && !igualAoPadrao ? (
+                  <Button variant="ghost" size="sm" className="ml-auto" onClick={restaurarPadrao}>
+                    <RotateCcw className="size-4" aria-hidden /> Restaurar padrão
+                  </Button>
+                ) : null}
               </div>
               {papelAtual.description ? (
                 <p className="mt-1 text-sm text-ink-500">{papelAtual.description}</p>

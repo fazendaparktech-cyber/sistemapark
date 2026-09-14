@@ -1,33 +1,33 @@
 import { ClipboardList } from 'lucide-react';
-import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { AuditDetails } from '@/components/admin/audit/audit-details';
-import { NoPermission } from '@/components/admin/no-permission';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { Field, Input, Select } from '@/components/ui/field';
-import { PageHeader } from '@/components/ui/page-header';
 import { AUDIT_ACTION_GROUPS, auditActionLabel, auditActorFallback } from '@/lib/audit-labels';
 import { addDays, dayBounds, formatDateTimeBR, isDateOnly } from '@/lib/dates';
 import { describeUserAgent } from '@/lib/user-agent';
 import { listAuditLogs } from '@/server/audit';
-import { can } from '@/server/auth/context';
-import { requirePageAuth } from '@/server/auth/guards';
+import type { AuthContext } from '@/server/auth/context';
+import type { SearchParamsRecord } from '@/server/filters';
 
-export const metadata: Metadata = { title: 'Auditoria' };
+const BASE = '/admin/usuarios?aba=atividade';
 
 function texto(valor: string | string[] | undefined, maximo = 120): string | undefined {
   return typeof valor === 'string' && valor.trim() ? valor.trim().slice(0, maximo) : undefined;
 }
 
-export default async function AuditoriaPage({ searchParams }: PageProps<'/admin/auditoria'>) {
-  const auth = await requirePageAuth();
-  if (!can(auth, 'audit.view')) return <NoPermission />;
-
-  const parametros = await searchParams;
+/** Aba Atividade: registro de tudo o que foi feito no sistema (auditoria). */
+export async function AbaAtividade({
+  auth,
+  parametros,
+}: {
+  auth: AuthContext;
+  parametros: SearchParamsRecord;
+}) {
   const grupoBruto = texto(parametros.grupo);
   const grupo = AUDIT_ACTION_GROUPS.find((item) => item.value === grupoBruto)?.value;
   const de = texto(parametros.de);
@@ -53,23 +53,19 @@ export default async function AuditoriaPage({ searchParams }: PageProps<'/admin/
   if (dataInicial) filtros.set('de', dataInicial);
   if (dataFinal) filtros.set('ate', dataFinal);
   if (registro) filtros.set('registro', registro);
+  const filtrando = filtros.size > 0;
   const comFiltros = (extra: Record<string, string>) => {
     const busca = new URLSearchParams(filtros);
     for (const [chave, valor] of Object.entries(extra)) busca.set(chave, valor);
     const consulta = busca.toString();
-    return consulta ? `/admin/auditoria?${consulta}` : '/admin/auditoria';
+    return consulta ? `${BASE}&${consulta}` : BASE;
   };
-  const filtrando = filtros.size > 0;
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title="Auditoria"
-        description="Tudo o que foi feito no sistema: quem, o quê, quando e de onde. Os registros não podem ser alterados nem apagados."
-      />
-
+    <>
       <Card className="p-4 sm:p-5">
         <form className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_170px_170px_auto] sm:items-end">
+          <input type="hidden" name="aba" value="atividade" />
           <Field id="filtro-grupo" label="Tipo de ação">
             <Select id="filtro-grupo" name="grupo" defaultValue={grupo ?? ''}>
               <option value="">Todas as ações</option>
@@ -92,7 +88,7 @@ export default async function AuditoriaPage({ searchParams }: PageProps<'/admin/
               Filtrar
             </Button>
             {filtrando ? (
-              <Link href="/admin/auditoria" className={buttonClasses('ghost')}>
+              <Link href={BASE} className={buttonClasses('ghost')}>
                 Limpar
               </Link>
             ) : null}
@@ -187,6 +183,6 @@ export default async function AuditoriaPage({ searchParams }: PageProps<'/admin/
           ) : null}
         </nav>
       ) : null}
-    </div>
+    </>
   );
 }

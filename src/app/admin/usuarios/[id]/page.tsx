@@ -26,7 +26,7 @@ import { getUser } from '@/server/users/service';
 
 export const metadata: Metadata = { title: 'Pessoa da equipe' };
 
-export default async function PessoaDaEquipePage({ params }: PageProps<'/admin/equipe/[id]'>) {
+export default async function PessoaDaEquipePage({ params }: PageProps<'/admin/usuarios/[id]'>) {
   const auth = await requirePageAuth();
   if (!can(auth, 'users.view')) return <NoPermission />;
 
@@ -77,10 +77,10 @@ export default async function PessoaDaEquipePage({ params }: PageProps<'/admin/e
     <div className="grid gap-6">
       <div>
         <Link
-          href="/admin/equipe"
+          href="/admin/usuarios"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-pool-700 hover:text-pool-800"
         >
-          <ArrowLeft className="size-4" aria-hidden /> Equipe
+          <ArrowLeft className="size-4" aria-hidden /> Usuários
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.02em] text-ink-900 sm:text-[30px]">
@@ -119,7 +119,7 @@ export default async function PessoaDaEquipePage({ params }: PageProps<'/admin/e
                 description="O que foi feito com este acesso."
                 action={
                   <Link
-                    href={`/admin/auditoria?registro=${pessoa.id}`}
+                    href={`/admin/usuarios?aba=atividade&registro=${pessoa.id}`}
                     className="text-sm font-semibold text-pool-700 hover:text-pool-800"
                   >
                     Ver tudo

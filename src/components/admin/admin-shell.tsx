@@ -3,7 +3,6 @@
 import {
   CalendarDays,
   ChevronDown,
-  ClipboardList,
   ExternalLink,
   FileSpreadsheet,
   KeyRound,
@@ -16,7 +15,6 @@ import {
   ReceiptText,
   ScanLine,
   Settings,
-  ShieldCheck,
   Tags,
   Ticket,
   TicketPercent,
@@ -50,8 +48,6 @@ const ICONES: Record<AdminIcon, LucideIcon> = {
   reports: FileSpreadsheet,
   marketing: Megaphone,
   team: Users,
-  permissions: ShieldCheck,
-  audit: ClipboardList,
   settings: Settings,
 };
 

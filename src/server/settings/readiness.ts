@@ -137,7 +137,7 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
         superAdmins >= 2
           ? `${superAdmins} pessoas com acesso total.`
           : 'Só uma pessoa tem acesso total. Nomeie uma segunda para não correr o risco de ficar sem acesso.',
-      href: superAdmins >= 2 ? undefined : '/admin/equipe',
+      href: superAdmins >= 2 ? undefined : '/admin/usuarios',
     },
   ];
 }
