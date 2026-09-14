@@ -1,7 +1,13 @@
 import 'server-only';
 
 import type { PrismaClient } from '@/generated/prisma/client';
-import { customerUpdateSchema, type CustomerSort, type CustomerUpdateInput } from '@/lib/customers';
+import {
+  customerCreateSchema,
+  customerUpdateSchema,
+  type CustomerCreateInput,
+  type CustomerSort,
+  type CustomerUpdateInput,
+} from '@/lib/customers';
 import {
   dateOnlyToDb,
   dbToDateOnly,
@@ -13,16 +19,21 @@ import {
 import { formatPhoneBR, isValidCpf, maskCpf, onlyDigits } from '@/lib/documents';
 import {
   effectiveOrderStatus,
+  saleStatusOf,
   type FinancialStatusKey,
   type OrderChannelKey,
   type OrderStatusKey,
+  type SaleStatusKey,
+  type TicketStatusKey,
 } from '@/lib/orders';
+import { effectiveTicketStatus } from '@/lib/tickets';
 
 import { recordAudit } from '../audit';
 import { requirePermission, type AuthContext } from '../auth/context';
 import { centsToCsv, toCsv } from '../csv';
 import { prisma, type DbClient, type Tx } from '../db';
-import { Errors, fromZodError } from '../errors';
+import { AppError, Errors, fromZodError } from '../errors';
+import { isUniqueViolation } from '../prisma-errors';
 import { rawDateOnly, rawNumber } from '../raw';
 import type { RequestMeta } from '../request';
 import { hashCpf } from '../signing';
@@ -95,9 +106,14 @@ export interface CustomerListItem {
   createdAt: Date;
   ordersCount: number;
   ticketsCount: number;
+  /** Dias diferentes com entrada registrada na portaria. */
+  visitsCount: number;
   totalSpentCents: number;
   lastOrderAt: Date | null;
+  /** Último dia com entrada na portaria. */
   lastVisitDate: DateOnly | null;
+  /** Próxima data com ingresso válido (hoje ou depois). */
+  nextVisitDate: DateOnly | null;
 }
 
 export interface CustomerListFilters {
@@ -137,15 +153,18 @@ interface LinhaDeCliente {
   created_at: Date;
   orders_count: number;
   tickets_count: number;
+  visits_count: number;
   total_spent: bigint | number;
   last_order_at: Date | null;
   last_visit_date: Date | string | null;
+  next_visit_date: Date | string | null;
   total: number;
 }
 
 async function consultarClientes(
   db: DbClient,
   parkId: string,
+  hoje: DateOnly,
   filtros: CustomerListFilters,
   limite: number,
   deslocamento: number,
@@ -160,19 +179,24 @@ async function consultarClientes(
         COALESCE(o.orders_count, 0) AS orders_count,
         COALESCE(o.total_spent, 0) AS total_spent,
         o.last_order_at,
-        o.last_visit_date,
-        COALESCE(t.tickets_count, 0) AS tickets_count
+        COALESCE(t.tickets_count, 0) AS tickets_count,
+        COALESCE(t.visits_count, 0) AS visits_count,
+        t.last_visit_date,
+        t.next_visit_date
       FROM customers c
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS orders_count, SUM(total_cents)::bigint AS total_spent,
-          MAX(confirmed_at) AS last_order_at, MAX(visit_date) AS last_visit_date
+          MAX(confirmed_at) AS last_order_at
         FROM orders
         WHERE customer_id = c.id AND status = 'CONFIRMED'
       ) o ON true
       LEFT JOIN LATERAL (
-        SELECT COUNT(*)::int AS tickets_count
+        SELECT COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'CHECKED_IN'))::int AS tickets_count,
+          COUNT(DISTINCT visit_date) FILTER (WHERE status = 'CHECKED_IN')::int AS visits_count,
+          MAX(visit_date) FILTER (WHERE status = 'CHECKED_IN') AS last_visit_date,
+          MIN(visit_date) FILTER (WHERE status = 'ACTIVE' AND visit_date >= ${hoje}::date) AS next_visit_date
         FROM tickets
-        WHERE customer_id = c.id AND status IN ('ACTIVE', 'CHECKED_IN')
+        WHERE customer_id = c.id
       ) t ON true
       WHERE c.park_id = ${parkId}::uuid
         AND (${marketing}::boolean IS NULL OR c.marketing_opt_in = ${marketing}::boolean)
@@ -197,7 +221,7 @@ async function consultarClientes(
 
   let total = linhas[0]?.total ?? 0;
   if (linhas.length === 0 && deslocamento > 0) {
-    const contagem = await consultarClientes(db, parkId, filtros, 1, 0);
+    const contagem = await consultarClientes(db, parkId, hoje, filtros, 1, 0);
     total = contagem.total;
   }
 
@@ -213,9 +237,11 @@ async function consultarClientes(
       createdAt: linha.created_at,
       ordersCount: linha.orders_count,
       ticketsCount: linha.tickets_count,
+      visitsCount: linha.visits_count,
       totalSpentCents: rawNumber(linha.total_spent),
       lastOrderAt: linha.last_order_at,
       lastVisitDate: rawDateOnly(linha.last_visit_date),
+      nextVisitDate: rawDateOnly(linha.next_visit_date),
     })),
   };
 }
@@ -230,6 +256,7 @@ export async function listCustomers(
   const { items, total } = await consultarClientes(
     db,
     auth.park.id,
+    todayIn(auth.park.timezone),
     filtros,
     CUSTOMERS_PAGE_SIZE,
     (pagina - 1) * CUSTOMERS_PAGE_SIZE,
@@ -277,6 +304,7 @@ export interface CustomerOrderRow {
   id: string;
   code: string;
   status: OrderStatusKey;
+  saleStatus: SaleStatusKey;
   financialStatus: FinancialStatusKey;
   channel: OrderChannelKey;
   visitDate: DateOnly;
@@ -306,9 +334,23 @@ export interface CustomerDetail {
     discountCents: number;
     averageOrderCents: number | null;
     firstOrderAt: Date | null;
+    /** Último dia com entrada na portaria. */
     lastVisitDate: DateOnly | null;
+    /** Próxima data com ingresso válido. */
+    nextVisitDate: DateOnly | null;
   };
   orders: CustomerOrderRow[];
+  tickets: {
+    id: string;
+    code: string;
+    typeName: string;
+    holderName: string | null;
+    visitDate: DateOnly;
+    status: TicketStatusKey;
+    checkedInAt: Date | null;
+    orderCode: string;
+  }[];
+  visits: { date: DateOnly; entries: number; firstEntryAt: Date | null }[];
 }
 
 export async function getCustomerDetail(
@@ -320,7 +362,8 @@ export async function getCustomerDetail(
   const cliente = await db.customer.findFirst({ where: { id, parkId: auth.park.id } });
   if (!cliente) throw Errors.notFound('Cliente não encontrado.');
 
-  const [pedidos, resumo, ingressos] = await Promise.all([
+  const hoje = todayIn(auth.park.timezone);
+  const [pedidos, resumo, ingressos, listaDeIngressos, visitas] = await Promise.all([
     db.order.findMany({
       where: { customerId: id },
       orderBy: { createdAt: 'desc' },
@@ -356,11 +399,42 @@ export async function getCustomerDetail(
         MAX(visit_date) AS last_visit_date
       FROM orders
       WHERE customer_id = ${id}::uuid AND status = 'CONFIRMED'`,
-    db.$queryRaw<{ tickets: number; visits: number }[]>`
+    db.$queryRaw<
+      {
+        tickets: number;
+        visits: number;
+        last_visit: Date | string | null;
+        next_visit: Date | string | null;
+      }[]
+    >`
       SELECT COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'CHECKED_IN'))::int AS tickets,
-        COUNT(DISTINCT visit_date) FILTER (WHERE status = 'CHECKED_IN')::int AS visits
+        COUNT(DISTINCT visit_date) FILTER (WHERE status = 'CHECKED_IN')::int AS visits,
+        MAX(visit_date) FILTER (WHERE status = 'CHECKED_IN') AS last_visit,
+        MIN(visit_date) FILTER (WHERE status = 'ACTIVE' AND visit_date >= ${hoje}::date) AS next_visit
       FROM tickets
       WHERE customer_id = ${id}::uuid`,
+    db.ticket.findMany({
+      where: { customerId: id },
+      orderBy: [{ visitDate: 'desc' }, { code: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        visitDate: true,
+        holderName: true,
+        checkedInAt: true,
+        ticketType: { select: { name: true } },
+        order: { select: { code: true } },
+      },
+    }),
+    db.$queryRaw<{ date: Date | string; entries: number; first_entry: Date | null }[]>`
+      SELECT visit_date AS date, COUNT(*)::int AS entries, MIN(checked_in_at) AS first_entry
+      FROM tickets
+      WHERE customer_id = ${id}::uuid AND status = 'CHECKED_IN'
+      GROUP BY visit_date
+      ORDER BY visit_date DESC
+      LIMIT 100`,
   ]);
 
   const linha = resumo[0];
@@ -387,12 +461,14 @@ export async function getCustomerDetail(
       discountCents: rawNumber(linha?.discount),
       averageOrderCents: quantidade > 0 ? Math.round(gasto / quantidade) : null,
       firstOrderAt: linha?.first_order_at ?? null,
-      lastVisitDate: rawDateOnly(linha?.last_visit_date),
+      lastVisitDate: rawDateOnly(ingressos[0]?.last_visit),
+      nextVisitDate: rawDateOnly(ingressos[0]?.next_visit),
     },
     orders: pedidos.map((pedido) => ({
       id: pedido.id,
       code: pedido.code,
       status: effectiveOrderStatus(pedido, agora),
+      saleStatus: saleStatusOf(pedido, agora),
       financialStatus: pedido.financialStatus,
       channel: pedido.channel,
       visitDate: dbToDateOnly(pedido.visitDate),
@@ -402,7 +478,98 @@ export async function getCustomerDetail(
       couponCode: pedido.coupon?.code ?? null,
       createdAt: pedido.createdAt,
     })),
+    tickets: listaDeIngressos.map((ingresso) => {
+      const visitDate = dbToDateOnly(ingresso.visitDate);
+      return {
+        id: ingresso.id,
+        code: ingresso.code,
+        typeName: ingresso.ticketType.name,
+        holderName: ingresso.holderName,
+        visitDate,
+        status: effectiveTicketStatus({ status: ingresso.status, visitDate }, hoje),
+        checkedInAt: ingresso.checkedInAt,
+        orderCode: ingresso.order.code,
+      };
+    }),
+    visits: visitas.map((visita) => ({
+      date: rawDateOnly(visita.date) ?? '',
+      entries: visita.entries,
+      firstEntryAt: visita.first_entry,
+    })),
   };
+}
+
+// ─── Cadastro e edição ──────────────────────────────────────────────────────
+
+function cpfJaCadastrado(outro: { id: string; name: string }): AppError {
+  return new AppError('CONFLICT', `Este CPF já está no cadastro de ${outro.name}.`, {
+    details: { customerId: outro.id, fields: { cpf: 'CPF já cadastrado para outro cliente' } },
+  });
+}
+
+/** Cadastro feito pela equipe (cliente do balcão, grupo, cliente sem compra ainda). */
+export async function createCustomer(
+  auth: AuthContext,
+  input: CustomerCreateInput,
+  meta: RequestMeta,
+  db: PrismaClient = prisma,
+): Promise<{ id: string }> {
+  requirePermission(auth, 'customers.manage');
+  const parsed = customerCreateSchema.safeParse(input);
+  if (!parsed.success) throw fromZodError(parsed.error);
+  const valores = parsed.data;
+  const cpfHash = valores.cpf ? hashCpf(valores.cpf) : null;
+
+  try {
+    return await db.$transaction(async (tx) => {
+      if (cpfHash) {
+        const outro = await tx.customer.findUnique({
+          where: { parkId_cpfHash: { parkId: auth.park.id, cpfHash } },
+          select: { id: true, name: true },
+        });
+        if (outro) throw cpfJaCadastrado(outro);
+      }
+      const criado = await tx.customer.create({
+        data: {
+          parkId: auth.park.id,
+          name: valores.name,
+          email: valores.email,
+          phone: valores.phone,
+          birthDate: valores.birthDate ? dateOnlyToDb(valores.birthDate) : null,
+          cpfHash,
+          cpfMasked: valores.cpf ? maskCpf(valores.cpf) : null,
+          marketingOptIn: valores.marketingOptIn,
+          notes: valores.notes,
+        },
+        select: { id: true },
+      });
+      await recordAudit(tx, {
+        action: 'customers.created',
+        parkId: auth.park.id,
+        actorUserId: auth.user.id,
+        entityType: 'customer',
+        entityId: criado.id,
+        after: {
+          name: valores.name,
+          email: valores.email,
+          phone: valores.phone,
+          cpf: valores.cpf ? maskCpf(valores.cpf) : null,
+          marketingOptIn: valores.marketingOptIn,
+        },
+        meta,
+      });
+      return criado;
+    });
+  } catch (erro) {
+    if (cpfHash && isUniqueViolation(erro)) {
+      const outro = await db.customer.findUnique({
+        where: { parkId_cpfHash: { parkId: auth.park.id, cpfHash } },
+        select: { id: true, name: true },
+      });
+      if (outro) throw cpfJaCadastrado(outro);
+    }
+    throw erro;
+  }
 }
 
 export async function updateCustomer(
@@ -420,6 +587,22 @@ export async function updateCustomer(
   await db.$transaction(async (tx) => {
     const atual = await tx.customer.findFirst({ where: { id, parkId: auth.park.id } });
     if (!atual) throw Errors.notFound('Cliente não encontrado.');
+
+    // O CPF pode ser incluído num cadastro sem CPF, mas não trocado.
+    const cpfHash = valores.cpf ? hashCpf(valores.cpf) : null;
+    if (cpfHash && atual.cpfHash && cpfHash !== atual.cpfHash) {
+      const mensagem = 'O CPF não pode ser trocado: é ele que identifica o cliente nas compras.';
+      throw new AppError('VALIDATION_ERROR', mensagem, { details: { fields: { cpf: mensagem } } });
+    }
+    const incluirCpf = cpfHash !== null && atual.cpfHash === null && valores.cpf !== null;
+    if (incluirCpf) {
+      const outro = await tx.customer.findUnique({
+        where: { parkId_cpfHash: { parkId: auth.park.id, cpfHash } },
+        select: { id: true, name: true },
+      });
+      if (outro) throw cpfJaCadastrado(outro);
+    }
+
     await tx.customer.update({
       where: { id },
       data: {
@@ -429,6 +612,7 @@ export async function updateCustomer(
         birthDate: valores.birthDate ? dateOnlyToDb(valores.birthDate) : null,
         marketingOptIn: valores.marketingOptIn,
         notes: valores.notes,
+        ...(incluirCpf && valores.cpf ? { cpfHash, cpfMasked: maskCpf(valores.cpf) } : {}),
       },
     });
     await recordAudit(tx, {
@@ -466,7 +650,14 @@ export async function exportCustomersCsv(
   db: DbClient = prisma,
 ): Promise<{ filename: string; content: string }> {
   requirePermission(auth, 'customers.view', 'customers.export');
-  const { items } = await consultarClientes(db, auth.park.id, filtros, LIMITE_EXPORTACAO, 0);
+  const { items } = await consultarClientes(
+    db,
+    auth.park.id,
+    todayIn(auth.park.timezone),
+    filtros,
+    LIMITE_EXPORTACAO,
+    0,
+  );
   const content = toCsv(
     [
       'Nome',
@@ -474,11 +665,13 @@ export async function exportCustomersCsv(
       'Celular',
       'CPF',
       'Aceita comunicações',
-      'Pedidos',
+      'Compras',
       'Ingressos',
-      'Total em compras (R$)',
-      'Último pedido',
+      'Visitas',
+      'Total gasto (R$)',
+      'Última compra',
       'Última visita',
+      'Próxima visita',
       'Cadastro',
     ],
     items.map((cliente) => [
@@ -489,9 +682,11 @@ export async function exportCustomersCsv(
       cliente.marketingOptIn,
       cliente.ordersCount,
       cliente.ticketsCount,
+      cliente.visitsCount,
       centsToCsv(cliente.totalSpentCents),
       cliente.lastOrderAt ? formatDateTimeBR(cliente.lastOrderAt, auth.park.timezone) : null,
       cliente.lastVisitDate ? formatDateBR(cliente.lastVisitDate) : null,
+      cliente.nextVisitDate ? formatDateBR(cliente.nextVisitDate) : null,
       formatDateTimeBR(cliente.createdAt, auth.park.timezone),
     ]),
   );

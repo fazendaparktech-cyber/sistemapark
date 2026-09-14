@@ -13,6 +13,7 @@ import {
 } from '@/lib/orders';
 
 import { recordAudit } from '../audit';
+import { notifyCapacityThresholds } from '../calendar/alerts';
 import { sellableTicketTypes, type SellableTicketType } from '../catalog/service';
 import { evaluateCouponForOrder, type CouponApplication } from '../coupons/service';
 import { randomCrockford, sha256Hex } from '../crypto';
@@ -512,6 +513,13 @@ export async function placeOnlineOrder(
 
   if (!transacao.reused) {
     const { orderId } = transacao;
+    const { parkDayId } = await db.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { parkDayId: true },
+    });
+    await notifyCapacityThresholds(db, park.id, parkDayId).catch((erro: unknown) =>
+      logger.error({ err: erro, orderId }, 'falha ao conferir alerta de lotação'),
+    );
     if (transacao.free) {
       await sendOrderConfirmedEmail(orderId, db).catch((erro: unknown) =>
         logger.error({ err: erro, orderId }, 'falha ao enviar e-mail de pedido confirmado'),

@@ -1,6 +1,12 @@
-import { isValidCpf, onlyDigits } from './documents';
 import { MAX_CENTS } from './money';
-import { cpfSchema, dateOnlySchema, optionalText, requiredPhoneSchema } from './person-schemas';
+import {
+  cpfSchema,
+  dateOnlySchema,
+  optionalCpfSchema,
+  optionalEmailSchema,
+  optionalText,
+  requiredPhoneSchema,
+} from './person-schemas';
 import { emailSchema, optionalPhoneSchema, personNameSchema, uuidSchema, z } from './validation';
 
 /** Pedidos, ingressos e pagamentos: rótulos, códigos e o formulário de compra. */
@@ -268,37 +274,6 @@ export type OrderReasonInput = z.input<typeof orderReasonSchema>;
 
 export const POS_PAYMENT_METHODS = ['CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'PIX'] as const;
 export type PosPaymentMethod = (typeof POS_PAYMENT_METHODS)[number];
-
-/** E-mail opcional: vazio vira `null`. */
-const optionalEmailSchema = z
-  .string()
-  .trim()
-  .max(254, 'E-mail muito longo')
-  .nullish()
-  .transform((valor, ctx) => {
-    if (!valor) return null;
-    const parsed = emailSchema.safeParse(valor);
-    if (!parsed.success) {
-      ctx.addIssue({ code: 'custom', message: 'Informe um e-mail válido' });
-      return z.NEVER;
-    }
-    return parsed.data;
-  });
-
-/** CPF opcional: vazio vira `null`; preenchido precisa ser válido. Devolve só os dígitos. */
-const optionalCpfSchema = z
-  .string()
-  .max(20, 'CPF inválido')
-  .nullish()
-  .transform((valor, ctx) => {
-    const digitos = onlyDigits(valor ?? '');
-    if (!digitos) return null;
-    if (!isValidCpf(digitos)) {
-      ctx.addIssue({ code: 'custom', message: 'CPF inválido' });
-      return z.NEVER;
-    }
-    return digitos;
-  });
 
 const posCouponSchema = z
   .string()

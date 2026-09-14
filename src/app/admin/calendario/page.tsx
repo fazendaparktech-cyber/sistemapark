@@ -12,7 +12,7 @@ import { formatNumber, formatPercent } from '@/lib/format';
 import { formatMonthYear } from '@/lib/weekdays';
 import { can } from '@/server/auth/context';
 import { requirePageAuth } from '@/server/auth/guards';
-import { getCalendarRange } from '@/server/calendar/service';
+import { getCalendarRange, specialPriceDates } from '@/server/calendar/service';
 import type { SearchParamsRecord } from '@/server/filters';
 
 export const metadata: Metadata = { title: 'Calendário' };
@@ -38,7 +38,10 @@ export default async function CalendarioPage({
   const inicio = `${mes}-01`;
   const fim = addDays(`${mesDeslocado(mes, 1)}-01`, -1);
 
-  const dias = await getCalendarRange(auth.park.id, inicio, fim);
+  const [dias, datasComPrecoEspecial] = await Promise.all([
+    getCalendarRange(auth.park.id, inicio, fim),
+    specialPriceDates(auth.park.id, inicio, fim),
+  ]);
   const abertos = dias.filter((dia) => dia.status === 'OPEN');
   const lotacao = abertos.reduce((soma, dia) => soma + (dia.capacity ?? 0), 0);
   const vendidos = abertos.reduce((soma, dia) => soma + dia.sold, 0);
@@ -58,7 +61,7 @@ export default async function CalendarioPage({
     <div className="grid gap-6">
       <PageHeader
         title="Calendário"
-        description="Dias em que o parque abre, horário, lotação e datas especiais. Dia sem configuração não vende."
+        description="Dias de funcionamento, horários, capacidade, preços especiais e eventos. Dia sem configuração não vende, e nenhuma venda passa da capacidade."
         actions={
           podeGerenciar ? (
             <PeriodDialog
@@ -81,7 +84,7 @@ export default async function CalendarioPage({
           icon={CalendarCheck}
         />
         <MetricCard
-          label="Lotação do mês"
+          label="Capacidade do mês"
           value={formatNumber(lotacao)}
           hint="Soma das vagas dos dias abertos"
           icon={Users}
@@ -90,7 +93,7 @@ export default async function CalendarioPage({
         <MetricCard
           label="Ingressos vendidos"
           value={formatNumber(vendidos)}
-          hint={lotacao > 0 ? `${formatPercent(vendidos / lotacao)} da lotação` : 'Nenhum dia aberto'}
+          hint={lotacao > 0 ? `${formatPercent(vendidos / lotacao)} da capacidade` : 'Nenhum dia aberto'}
           icon={Ticket}
           tone="sun"
         />
@@ -138,11 +141,25 @@ export default async function CalendarioPage({
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="size-2 rounded-full bg-ink-300" /> Fechado
           </span>
-          {podeGerenciar ? <span>Toque em um dia para editar</span> : null}
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="rounded bg-sun-100 px-1 text-[10px] font-semibold text-sun-800">
+              R$
+            </span>{' '}
+            Preço especial
+          </span>
+          <span>
+            {podeGerenciar ? 'Toque em um dia para editar' : 'Toque em um dia para ver os detalhes'}
+          </span>
         </div>
       </div>
 
-      <CalendarMonth days={dias} today={hoje} canManage={podeGerenciar} defaults={padrao} />
+      <CalendarMonth
+        days={dias}
+        today={hoje}
+        canManage={podeGerenciar}
+        defaults={padrao}
+        specialPriceDates={datasComPrecoEspecial}
+      />
     </div>
   );
 }

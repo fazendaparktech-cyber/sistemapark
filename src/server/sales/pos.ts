@@ -22,6 +22,7 @@ import type { DayKind } from '@/lib/pricing';
 
 import { recordAudit } from '../audit';
 import { can, requirePermission, type AuthContext } from '../auth/context';
+import { notifyCapacityThresholds } from '../calendar/alerts';
 import { getCalendarRange, type CalendarDay } from '../calendar/service';
 import { sellableTicketTypes } from '../catalog/service';
 import { evaluateCouponForOrder, type CouponApplication } from '../coupons/service';
@@ -645,7 +646,7 @@ export async function placePosOrder(
   if (dados.customerId && !escolhido) throw Errors.notFound('Cliente não encontrado.');
   const cpfHash = dados.buyer.cpf ? hashCpf(dados.buyer.cpf) : (escolhido?.cpfHash ?? null);
 
-  let transacao: { orderId: string; confirmed: boolean; changeCents: number | null };
+  let transacao: { orderId: string; parkDayId: string; confirmed: boolean; changeCents: number | null };
   try {
     transacao = await db.$transaction(
       async (tx) => {
@@ -902,7 +903,7 @@ export async function placePosOrder(
           });
         }
 
-        return { orderId: pedido.id, confirmed: confirmado, changeCents: troco };
+        return { orderId: pedido.id, parkDayId: dia.id, confirmed: confirmado, changeCents: troco };
       },
       { maxWait: 10_000, timeout: 30_000 },
     );
@@ -925,6 +926,9 @@ export async function placePosOrder(
   }
 
   const { orderId } = transacao;
+  await notifyCapacityThresholds(db, parkId, transacao.parkDayId).catch((erro: unknown) =>
+    logger.error({ err: erro, orderId }, 'falha ao conferir alerta de lotação'),
+  );
   let pixError: string | null = null;
   let emailSent = false;
   if (!transacao.confirmed) {

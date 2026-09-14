@@ -11,11 +11,13 @@ import {
   weekdayOf,
   type DateOnly,
 } from '@/lib/dates';
-import { DAY_KINDS, dayKindOf, MANUAL_DAY_KINDS, type DayKind } from '@/lib/pricing';
-import { z } from '@/lib/validation';
+import { MAX_CENTS } from '@/lib/money';
+import { DAY_KINDS, dayKindOf, MANUAL_DAY_KINDS, resolvePrice, type DayKind } from '@/lib/pricing';
+import { uuidSchema, z } from '@/lib/validation';
 
 import { recordAudit } from '../audit';
 import { requirePermission, type AuthContext } from '../auth/context';
+import { lotSalesByRule, toPriceRule } from '../catalog/service';
 import { prisma, type DbClient } from '../db';
 import { AppError, Errors, fromZodError } from '../errors';
 import type { RequestMeta } from '../request';
@@ -365,4 +367,179 @@ export async function saveCalendarDay(
   const [dia] = await getCalendarRange(auth.park.id, date, date, db);
   if (!dia) throw Errors.notFound('Dia não encontrado.');
   return dia;
+}
+
+// ─── Preço especial do dia ──────────────────────────────────────────────────
+
+/** Preço especial de uma data vence qualquer outra regra de preço. */
+const PRIORIDADE_DO_PRECO_ESPECIAL = 1000;
+const NOME_DO_PRECO_ESPECIAL = 'Preço especial do dia';
+
+export interface DayTicketPrice {
+  ticketTypeId: string;
+  name: string;
+  basePriceCents: number;
+  /** Preço que vale na data, considerando todas as regras (inclusive a especial). */
+  currentPriceCents: number;
+  currentLabel: string | null;
+  /** Preço especial só desta data; `null` quando não há. */
+  specialPriceCents: number | null;
+}
+
+export async function getDayPricing(
+  auth: AuthContext,
+  date: DateOnly,
+  db: DbClient = prisma,
+  now: Date = new Date(),
+): Promise<DayTicketPrice[]> {
+  requirePermission(auth, 'calendar.view');
+  if (!isDateOnly(date)) throw Errors.badRequest('Data inválida.');
+  const noBanco = dateOnlyToDb(date);
+
+  const [dia, tipos] = await Promise.all([
+    db.parkDay.findUnique({
+      where: { parkId_date: { parkId: auth.park.id, date: noBanco } },
+      select: { dayKind: true },
+    }),
+    db.ticketType.findMany({
+      where: { parkId: auth.park.id, isActive: true },
+      include: { prices: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    }),
+  ]);
+  const vendidosPorLote = await lotSalesByRule(
+    db,
+    tipos.flatMap((tipo) =>
+      tipo.prices.filter((preco) => preco.lotQuantity !== null).map((preco) => preco.id),
+    ),
+  );
+
+  return tipos.map((tipo) => {
+    const vale = resolvePrice({
+      basePriceCents: tipo.basePriceCents,
+      rules: tipo.prices.map(toPriceRule),
+      visitDate: date,
+      dayKindOverride: dia?.dayKind ?? null,
+      now,
+      soldByRule: vendidosPorLote,
+    });
+    const especial = tipo.prices.find(
+      (preco) =>
+        preco.kind === 'SPECIAL_DATE' &&
+        preco.visitFrom?.getTime() === noBanco.getTime() &&
+        preco.visitUntil?.getTime() === noBanco.getTime(),
+    );
+    return {
+      ticketTypeId: tipo.id,
+      name: tipo.name,
+      basePriceCents: tipo.basePriceCents,
+      currentPriceCents: vale.priceCents,
+      currentLabel: vale.label,
+      specialPriceCents: especial?.priceCents ?? null,
+    };
+  });
+}
+
+export const daySpecialPricesSchema = z.strictObject({
+  prices: z
+    .array(
+      z.strictObject({
+        ticketTypeId: uuidSchema,
+        priceCents: z.number().int().min(0, 'Preço inválido').max(MAX_CENTS, 'Preço muito alto').nullable(),
+      }),
+    )
+    .max(100),
+});
+
+export type DaySpecialPricesInput = z.input<typeof daySpecialPricesSchema>;
+
+/** Define, altera ou remove (valor vazio) o preço especial de cada tipo de ingresso numa data. */
+export async function saveDaySpecialPrices(
+  auth: AuthContext,
+  date: DateOnly,
+  input: DaySpecialPricesInput,
+  meta: RequestMeta,
+  db: PrismaClient = prisma,
+): Promise<DayTicketPrice[]> {
+  requirePermission(auth, 'calendar.manage');
+  if (!isDateOnly(date)) throw Errors.badRequest('Data inválida.');
+  const parsed = daySpecialPricesSchema.safeParse(input);
+  if (!parsed.success) throw fromZodError(parsed.error);
+  const noBanco = dateOnlyToDb(date);
+  const ids = [...new Set(parsed.data.prices.map((item) => item.ticketTypeId))];
+
+  await db.$transaction(async (tx) => {
+    const tipos = await tx.ticketType.findMany({
+      where: { parkId: auth.park.id, id: { in: ids } },
+      select: { id: true },
+    });
+    if (tipos.length !== ids.length) throw Errors.notFound('Tipo de ingresso não encontrado.');
+    const existentes = await tx.ticketPrice.findMany({
+      where: { ticketTypeId: { in: ids }, kind: 'SPECIAL_DATE', visitFrom: noBanco, visitUntil: noBanco },
+    });
+
+    const mudancas: { ticketTypeId: string; before: number | null; after: number | null }[] = [];
+    for (const item of parsed.data.prices) {
+      const atual = existentes.find((regra) => regra.ticketTypeId === item.ticketTypeId);
+      if (item.priceCents === null) {
+        if (!atual) continue;
+        await tx.ticketPrice.delete({ where: { id: atual.id } });
+        mudancas.push({ ticketTypeId: item.ticketTypeId, before: atual.priceCents, after: null });
+      } else if (atual) {
+        if (atual.priceCents === item.priceCents && atual.isActive) continue;
+        await tx.ticketPrice.update({
+          where: { id: atual.id },
+          data: { priceCents: item.priceCents, compareAtCents: null, isActive: true },
+        });
+        mudancas.push({ ticketTypeId: item.ticketTypeId, before: atual.priceCents, after: item.priceCents });
+      } else {
+        await tx.ticketPrice.create({
+          data: {
+            ticketTypeId: item.ticketTypeId,
+            kind: 'SPECIAL_DATE',
+            name: NOME_DO_PRECO_ESPECIAL,
+            priceCents: item.priceCents,
+            dayKinds: [],
+            visitFrom: noBanco,
+            visitUntil: noBanco,
+            priority: PRIORIDADE_DO_PRECO_ESPECIAL,
+            isActive: true,
+          },
+        });
+        mudancas.push({ ticketTypeId: item.ticketTypeId, before: null, after: item.priceCents });
+      }
+    }
+
+    if (mudancas.length > 0) {
+      await recordAudit(tx, {
+        action: 'calendar.special_prices_updated',
+        parkId: auth.park.id,
+        actorUserId: auth.user.id,
+        entityType: 'park_day',
+        entityId: date,
+        data: { changes: mudancas },
+        meta,
+      });
+    }
+  });
+  return getDayPricing(auth, date, db);
+}
+
+/** Datas do intervalo que têm preço especial em algum tipo de ingresso. */
+export async function specialPriceDates(
+  parkId: string,
+  from: DateOnly,
+  to: DateOnly,
+  db: DbClient = prisma,
+): Promise<DateOnly[]> {
+  const regras = await db.ticketPrice.findMany({
+    where: {
+      kind: 'SPECIAL_DATE',
+      isActive: true,
+      ticketType: { parkId },
+      visitFrom: { gte: dateOnlyToDb(from), lte: dateOnlyToDb(to) },
+    },
+    select: { visitFrom: true },
+  });
+  return [...new Set(regras.flatMap((regra) => (regra.visitFrom ? [dbToDateOnly(regra.visitFrom)] : [])))];
 }

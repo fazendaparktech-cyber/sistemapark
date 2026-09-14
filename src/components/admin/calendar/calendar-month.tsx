@@ -2,12 +2,13 @@
 
 import { CalendarPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { api, ApiError, errorMessage } from '@/lib/api-client';
 import { weekdayOf } from '@/lib/dates';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, formatPercent } from '@/lib/format';
+import { formatBRL } from '@/lib/money';
 import { DAY_KIND_LABELS, type DayKind } from '@/lib/pricing';
 import { formatDateLong, WEEKDAY_SHORT_LABELS } from '@/lib/weekdays';
 
@@ -15,7 +16,9 @@ import { Alert } from '../../ui/alert';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogContent, DialogTrigger } from '../../ui/dialog';
+import { Spinner } from '../../ui/feedback';
 import { Checkbox, Field, fieldIds, Input, Select, Textarea } from '../../ui/field';
+import { MoneyInput } from '../../ui/money-input';
 
 export interface CalendarCell {
   date: string;
@@ -45,13 +48,33 @@ function capitalizar(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+interface PrecoDoDia {
+  ticketTypeId: string;
+  name: string;
+  basePriceCents: number;
+  currentPriceCents: number;
+  currentLabel: string | null;
+  specialPriceCents: number | null;
+}
+
+function Estatistica({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="rounded-xl bg-ink-50 px-3 py-2.5 ring-1 ring-inset ring-ink-200/70">
+      <dt className="text-xs font-medium text-ink-500">{rotulo}</dt>
+      <dd className="tabular font-display text-lg font-semibold text-ink-900">{valor}</dd>
+    </div>
+  );
+}
+
 function DiaDialog({
   dia,
   defaults,
+  canManage,
   onClose,
 }: {
   dia: CalendarCell;
   defaults: DayDefaults;
+  canManage: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -65,6 +88,30 @@ function DiaDialog({
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [precos, setPrecos] = useState<PrecoDoDia[] | null>(null);
+  const [erroDosPrecos, setErroDosPrecos] = useState<string | null>(null);
+  const [especiais, setEspeciais] = useState<Record<string, number | null>>({});
+
+  useEffect(() => {
+    const controle = new AbortController();
+    api<PrecoDoDia[]>(`/api/admin/calendar/days/${dia.date}/prices`, { signal: controle.signal })
+      .then((lista) => {
+        setPrecos(lista);
+        setEspeciais(Object.fromEntries(lista.map((item) => [item.ticketTypeId, item.specialPriceCents])));
+      })
+      .catch((falha: unknown) => {
+        if (falha instanceof DOMException && falha.name === 'AbortError') return;
+        setErroDosPrecos(errorMessage(falha));
+      });
+    return () => controle.abort();
+  }, [dia.date]);
+
+  const aberto = dia.status === 'OPEN';
+  const capacidade = dia.capacity ?? 0;
+  const ocupacao = aberto && capacidade > 0 ? (dia.sold + dia.held) / capacidade : 0;
+  const precosAlterados = (precos ?? []).filter(
+    (item) => (especiais[item.ticketTypeId] ?? null) !== item.specialPriceCents,
+  );
 
   async function salvar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -84,6 +131,17 @@ function DiaDialog({
           notes: observacoes || null,
         },
       });
+      if (precosAlterados.length > 0) {
+        await api(`/api/admin/calendar/days/${dia.date}/prices`, {
+          method: 'PUT',
+          body: {
+            prices: precosAlterados.map((item) => ({
+              ticketTypeId: item.ticketTypeId,
+              priceCents: especiais[item.ticketTypeId] ?? null,
+            })),
+          },
+        });
+      }
       toast.success('Dia salvo no calendário.');
       onClose();
       router.refresh();
@@ -95,17 +153,122 @@ function DiaDialog({
     }
   }
 
+  const estatisticas = (
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <Estatistica rotulo="Capacidade" valor={aberto ? formatNumber(capacidade) : 'Fechado'} />
+      <Estatistica rotulo="Vendidos" valor={formatNumber(dia.sold)} />
+      <Estatistica rotulo="Disponíveis" valor={formatNumber(aberto ? (dia.available ?? 0) : 0)} />
+      <Estatistica rotulo="Ocupação" valor={formatPercent(ocupacao)} />
+    </dl>
+  );
+
+  const listaDePrecos = (
+    <section className="grid gap-3" aria-labelledby={`precos-${dia.date}`}>
+      <div>
+        <h3 id={`precos-${dia.date}`} className="text-sm font-semibold text-ink-900">
+          Preços do dia
+        </h3>
+        <p className="text-[13px] text-ink-500">
+          {canManage
+            ? 'Deixe em branco para usar o preço normal. O preço especial vale só nesta data, no site e no balcão.'
+            : 'Preço cobrado por tipo de ingresso nesta data.'}
+        </p>
+      </div>
+      {erroDosPrecos ? (
+        <Alert tone="danger">{erroDosPrecos}</Alert>
+      ) : !precos ? (
+        <p className="flex items-center gap-2 text-sm text-ink-500">
+          <Spinner className="size-4" />
+          Carregando preços
+        </p>
+      ) : precos.length === 0 ? (
+        <p className="text-sm text-ink-500">Nenhum tipo de ingresso ativo.</p>
+      ) : (
+        <ul className="divide-y divide-ink-100 rounded-xl ring-1 ring-inset ring-ink-200">
+          {precos.map((item) => (
+            <li
+              key={item.ticketTypeId}
+              className="grid items-center gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_11rem]"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink-900">{item.name}</p>
+                <p className="text-xs text-ink-500">
+                  Vale no dia:{' '}
+                  <span className="tabular font-medium text-ink-700">
+                    {formatBRL(item.currentPriceCents)}
+                  </span>
+                  {item.currentLabel ? ` (${item.currentLabel})` : ' (preço base)'}
+                </p>
+              </div>
+              {canManage ? (
+                <MoneyInput
+                  id={`preco-especial-${item.ticketTypeId}`}
+                  aria-label={`Preço especial de ${item.name}`}
+                  placeholder="Sem preço especial"
+                  valueCents={especiais[item.ticketTypeId] ?? null}
+                  onValueChange={(valor) =>
+                    setEspeciais((atuais) => ({ ...atuais, [item.ticketTypeId]: valor }))
+                  }
+                />
+              ) : item.specialPriceCents !== null ? (
+                <p className="tabular text-sm font-semibold text-grape-700 sm:text-right">
+                  Especial: {formatBRL(item.specialPriceCents)}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+
+  const descricao =
+    dia.sold + dia.held > 0
+      ? `${formatNumber(dia.sold)} vendidos${
+          dia.held > 0 ? ` e ${formatNumber(dia.held)} aguardando pagamento` : ''
+        }. Dia com vendas não pode ser fechado nem ficar com capacidade menor que isso.`
+      : 'Nenhuma venda para este dia ainda.';
+
+  if (!canManage) {
+    return (
+      <DialogContent title={capitalizar(formatDateLong(dia.date))} description={descricao} size="lg">
+        <div className="grid gap-5">
+          {estatisticas}
+          <dl className="grid gap-1 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">Situação</dt>
+              <dd className="font-medium text-ink-900">
+                {aberto ? 'Aberto' : dia.status === 'CLOSED' ? 'Fechado' : 'Sem configuração'}
+              </dd>
+            </div>
+            {aberto ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-500">Horário</dt>
+                <dd className="font-medium text-ink-900">
+                  {dia.opensAt && dia.closesAt ? `${dia.opensAt} às ${dia.closesAt}` : 'Não informado'}
+                </dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">Tipo do dia</dt>
+              <dd className="font-medium text-ink-900">{dia.label ?? DAY_KIND_LABELS[dia.dayKind]}</dd>
+            </div>
+          </dl>
+          {listaDePrecos}
+          <div className="flex justify-end border-t border-ink-100 pt-5">
+            <Button variant="secondary" onClick={onClose}>
+              Fechar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    );
+  }
+
   return (
-    <DialogContent
-      title={capitalizar(formatDateLong(dia.date))}
-      description={
-        dia.sold + dia.held > 0
-          ? `${formatNumber(dia.sold)} ingressos vendidos e ${formatNumber(dia.held)} aguardando pagamento. Um dia com vendas não pode ser fechado nem ficar com lotação menor que isso.`
-          : 'Nenhuma venda para este dia ainda.'
-      }
-      size="md"
-    >
+    <DialogContent title={capitalizar(formatDateLong(dia.date))} description={descricao} size="lg">
       <form onSubmit={salvar} noValidate className="grid gap-5">
+        {estatisticas}
         {erro ? <Alert tone="danger">{erro}</Alert> : null}
         <div role="radiogroup" aria-label="Situação do dia" className="grid grid-cols-2 gap-2">
           {(
@@ -151,7 +314,7 @@ function DiaDialog({
                 onChange={(evento) => setFecha(evento.target.value)}
               />
             </Field>
-            <Field id="dia-lotacao" label="Lotação" hint="Pessoas no dia." error={campos.capacity}>
+            <Field id="dia-lotacao" label="Capacidade" hint="Pessoas no dia." error={campos.capacity}>
               <Input
                 id="dia-lotacao"
                 inputMode="numeric"
@@ -163,11 +326,17 @@ function DiaDialog({
           </div>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="dia-tipo" label="Tipo do dia (para o preço)" error={campos.dayKind}>
+          <Field
+            id="dia-tipo"
+            label="Tipo do dia"
+            hint="Feriado, evento ou data especial."
+            error={campos.dayKind}
+          >
             <Select
               id="dia-tipo"
               value={tipo}
               onChange={(evento) => setTipo(evento.target.value as DayKind | '')}
+              {...fieldIds('dia-tipo', { hint: true, error: campos.dayKind })}
             >
               <option value="">
                 {weekdayOf(dia.date) === 0 || weekdayOf(dia.date) === 6 ? 'Fim de semana' : 'Dia útil'}
@@ -179,7 +348,12 @@ function DiaDialog({
               ))}
             </Select>
           </Field>
-          <Field id="dia-rotulo" label="Nome do dia" hint="Ex.: Dia das Crianças." error={campos.label}>
+          <Field
+            id="dia-rotulo"
+            label="Nome do dia ou evento"
+            hint="Ex.: Dia das Crianças."
+            error={campos.label}
+          >
             <Input
               id="dia-rotulo"
               value={rotulo}
@@ -189,6 +363,7 @@ function DiaDialog({
             />
           </Field>
         </div>
+        {listaDePrecos}
         <Field id="dia-observacoes" label="Observações internas" error={campos.notes}>
           <Textarea
             id="dia-observacoes"
@@ -293,7 +468,7 @@ export function PeriodDialog({
         description={
           resultado
             ? undefined
-            : 'Abra ou feche vários dias de uma vez, com horário e lotação. Dias com vendas nunca são fechados nem reduzidos abaixo do vendido.'
+            : 'Abra ou feche vários dias de uma vez, com horário e capacidade. Dias com vendas nunca são fechados nem reduzidos abaixo do vendido.'
         }
         size="md"
       >
@@ -416,7 +591,7 @@ export function PeriodDialog({
                     onChange={(evento) => setFecha(evento.target.value)}
                   />
                 </Field>
-                <Field id="periodo-lotacao" label="Lotação" error={campos.capacity}>
+                <Field id="periodo-lotacao" label="Capacidade" error={campos.capacity}>
                   <Input
                     id="periodo-lotacao"
                     inputMode="numeric"
@@ -459,15 +634,18 @@ export function CalendarMonth({
   today,
   canManage,
   defaults,
+  specialPriceDates,
 }: {
   days: CalendarCell[];
   today: string;
   canManage: boolean;
   defaults: DayDefaults;
+  specialPriceDates: readonly string[];
 }) {
   const [selecionado, setSelecionado] = useState<CalendarCell | null>(null);
   const primeiro = days[0];
   const vazios = primeiro ? weekdayOf(primeiro.date) : 0;
+  const comPrecoEspecial = new Set(specialPriceDates);
 
   return (
     <>
@@ -483,19 +661,36 @@ export function CalendarMonth({
           {Array.from({ length: vazios }, (_, indice) => (
             <div
               key={`vazio-${indice}`}
-              className="min-h-16 border-b border-r border-ink-100 bg-ink-50/30 sm:min-h-28"
+              className="min-h-16 border-b border-r border-ink-100 bg-ink-50/30 sm:min-h-32"
             />
           ))}
           {days.map((dia) => {
             const passado = dia.date < today;
             const aberto = dia.status === 'OPEN';
             const capacidade = dia.capacity ?? 0;
-            const ocupacao =
-              aberto && capacidade > 0 ? Math.min(100, ((dia.sold + dia.held) / capacidade) * 100) : 0;
+            const ocupados = dia.sold + dia.held;
+            const ocupacao = aberto && capacidade > 0 ? Math.min(100, (ocupados / capacidade) * 100) : 0;
             const esgotado = aberto && dia.available === 0;
-            const especial = dia.dayKindOverride !== null;
-            const conteudo = (
-              <>
+            const especial = dia.dayKindOverride !== null || dia.label !== null;
+            const precoEspecial = comPrecoEspecial.has(dia.date);
+            const situacao = aberto
+              ? `aberto, capacidade ${formatNumber(capacidade)}, ${formatNumber(dia.sold)} vendidos, ${formatNumber(dia.available ?? 0)} disponíveis, ocupação ${Math.round(ocupacao)}%`
+              : dia.status === 'CLOSED'
+                ? 'fechado'
+                : 'sem configuração';
+
+            return (
+              <button
+                key={dia.date}
+                type="button"
+                onClick={() => setSelecionado(dia)}
+                aria-label={`${formatDateLong(dia.date)}: ${situacao}. ${canManage ? 'Editar dia' : 'Ver dia'}`}
+                className={cn(
+                  'flex min-h-16 flex-col border-b border-r border-ink-100 p-1.5 text-left transition-colors hover:bg-pool-50/60 focus-visible:relative focus-visible:z-10 sm:min-h-32 sm:p-2',
+                  dia.status === 'CLOSED' && 'bg-ink-50/80',
+                  passado && 'opacity-55',
+                )}
+              >
                 <div className="flex items-start justify-between gap-1">
                   <span
                     className={cn(
@@ -518,16 +713,35 @@ export function CalendarMonth({
                           : 'bg-transparent ring-1 ring-ink-300',
                     )}
                   />
+                  {precoEspecial ? (
+                    <span className="hidden rounded bg-sun-100 px-1 text-[10px] font-semibold text-sun-800 sm:inline">
+                      Preço especial
+                    </span>
+                  ) : null}
                 </div>
+                {aberto ? (
+                  <p className="tabular mt-0.5 text-[10px] font-semibold text-ink-500 sm:hidden">
+                    {Math.round(ocupacao)}%
+                  </p>
+                ) : null}
                 <div className="mt-1 hidden text-left text-[11px] leading-4 sm:block">
                   {aberto ? (
                     <>
-                      <p className="font-semibold text-success-700">{esgotado ? 'Esgotado' : 'Aberto'}</p>
-                      <p className="text-ink-500">
-                        {dia.opensAt && dia.closesAt ? `${dia.opensAt} às ${dia.closesAt}` : 'Horário livre'}
+                      <p className={cn('font-semibold', esgotado ? 'text-danger-700' : 'text-success-700')}>
+                        {esgotado ? 'Esgotado' : 'Aberto'}
+                        {dia.opensAt && dia.closesAt ? (
+                          <span className="font-normal text-ink-500">
+                            {' '}
+                            {dia.opensAt}-{dia.closesAt}
+                          </span>
+                        ) : null}
                       </p>
-                      <p className="tabular text-ink-600">
-                        {formatNumber(dia.sold)} / {formatNumber(capacidade)}
+                      <p className="tabular text-ink-700">
+                        <span className="font-semibold">{formatNumber(dia.sold)}</span> de{' '}
+                        {formatNumber(capacidade)} vendidos
+                      </p>
+                      <p className="tabular text-ink-500">
+                        {formatNumber(dia.available ?? 0)} livres · {Math.round(ocupacao)}%
                       </p>
                     </>
                   ) : dia.status === 'CLOSED' ? (
@@ -546,36 +760,13 @@ export function CalendarMonth({
                     <div
                       className={cn(
                         'h-full rounded-full',
-                        ocupacao >= 90 ? 'bg-danger-600' : ocupacao >= 60 ? 'bg-sun-400' : 'bg-pool-500',
+                        ocupacao >= 90 ? 'bg-danger-600' : ocupacao >= 80 ? 'bg-sun-400' : 'bg-pool-500',
                       )}
                       style={{ width: `${ocupacao}%` }}
                     />
                   </div>
                 ) : null}
-              </>
-            );
-            const classes = cn(
-              'flex min-h-16 flex-col border-b border-r border-ink-100 p-1.5 sm:min-h-28 sm:p-2',
-              dia.status === 'CLOSED' && 'bg-ink-50/80',
-              passado && 'opacity-55',
-            );
-            return canManage ? (
-              <button
-                key={dia.date}
-                type="button"
-                onClick={() => setSelecionado(dia)}
-                className={cn(
-                  classes,
-                  'text-left transition-colors hover:bg-pool-50/60 focus-visible:relative focus-visible:z-10',
-                )}
-                aria-label={`${formatDateLong(dia.date)}: ${aberto ? 'aberto' : dia.status === 'CLOSED' ? 'fechado' : 'sem configuração'}. Editar dia`}
-              >
-                {conteudo}
               </button>
-            ) : (
-              <div key={dia.date} className={classes}>
-                {conteudo}
-              </div>
             );
           })}
         </div>
@@ -587,6 +778,7 @@ export function CalendarMonth({
             key={selecionado.date}
             dia={selecionado}
             defaults={defaults}
+            canManage={canManage}
             onClose={() => setSelecionado(null)}
           />
         ) : null}
