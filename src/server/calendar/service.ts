@@ -146,7 +146,6 @@ export const calendarPeriodSchema = z
     opensAt: horario,
     closesAt: horario,
     capacity: z.number().int().min(0, 'A lotação não pode ser negativa').max(100_000, 'Lotação muito alta'),
-    overwrite: z.boolean(),
   })
   .superRefine((valores, ctx) => {
     conferirHorarios(valores, ctx);
@@ -168,9 +167,10 @@ export const calendarPeriodSchema = z
 export type CalendarPeriodInput = z.input<typeof calendarPeriodSchema>;
 
 export interface CalendarPeriodResult {
-  created: number;
-  updated: number;
-  skipped: number;
+  opened: number;
+  closed: number;
+  /** Dias que já estavam exatamente assim. */
+  unchanged: number;
   conflicts: { date: DateOnly; reason: string }[];
 }
 
@@ -188,7 +188,11 @@ function motivoDeConflito(
   return null;
 }
 
-/** Abre ou fecha um período, nos dias da semana escolhidos. */
+/**
+ * Aplica o funcionamento a um período. Ao abrir, só os dias da semana escolhidos ficam abertos e os
+ * demais dias do período são fechados. Ao fechar, só os escolhidos fecham e o resto não muda.
+ * Dias com vendas nunca são fechados nem reduzidos abaixo do vendido.
+ */
 export async function applyCalendarPeriod(
   auth: AuthContext,
   input: CalendarPeriodInput,
@@ -210,36 +214,51 @@ export async function applyCalendarPeriod(
       });
       const porData = new Map(existentes.map((dia) => [dbToDateOnly(dia.date), dia]));
       const ocupacao = await occupancyByDay(tx, auth.park.id, periodo.from, periodo.to);
-      const resultado: CalendarPeriodResult = { created: 0, updated: 0, skipped: 0, conflicts: [] };
+      const resultado: CalendarPeriodResult = { opened: 0, closed: 0, unchanged: 0, conflicts: [] };
 
       const total = diffDays(periodo.from, periodo.to);
       for (let i = 0; i <= total; i++) {
         const dia = addDays(periodo.from, i);
-        if (!periodo.weekdays.includes(weekdayOf(dia))) continue;
+        const escolhido = periodo.weekdays.includes(weekdayOf(dia));
+        if (!escolhido && periodo.status === 'CLOSED') continue;
         const existente = porData.get(dia);
-        const dados = {
-          status: periodo.status,
-          opensAt: periodo.status === 'OPEN' ? periodo.opensAt : null,
-          closesAt: periodo.status === 'OPEN' ? periodo.closesAt : null,
-          capacity: periodo.capacity,
-        };
+        const dados =
+          escolhido && periodo.status === 'OPEN'
+            ? {
+                status: 'OPEN' as const,
+                opensAt: periodo.opensAt,
+                closesAt: periodo.closesAt,
+                capacity: periodo.capacity,
+              }
+            : {
+                status: 'CLOSED' as const,
+                opensAt: null,
+                closesAt: null,
+                capacity: existente?.capacity ?? periodo.capacity,
+              };
 
-        if (existente && !periodo.overwrite) {
-          resultado.skipped += 1;
+        if (
+          existente &&
+          existente.status === dados.status &&
+          existente.opensAt === dados.opensAt &&
+          existente.closesAt === dados.closesAt &&
+          existente.capacity === dados.capacity
+        ) {
+          resultado.unchanged += 1;
+          continue;
+        }
+        const conflito = motivoDeConflito(dados, ocupacao.get(dia) ?? { sold: 0, held: 0 });
+        if (conflito) {
+          resultado.conflicts.push({ date: dia, reason: conflito });
           continue;
         }
         if (existente) {
-          const conflito = motivoDeConflito(dados, ocupacao.get(dia) ?? { sold: 0, held: 0 });
-          if (conflito) {
-            resultado.conflicts.push({ date: dia, reason: conflito });
-            continue;
-          }
           await tx.parkDay.update({ where: { id: existente.id }, data: dados });
-          resultado.updated += 1;
         } else {
           await tx.parkDay.create({ data: { parkId: auth.park.id, date: dateOnlyToDb(dia), ...dados } });
-          resultado.created += 1;
         }
+        if (dados.status === 'OPEN') resultado.opened += 1;
+        else resultado.closed += 1;
       }
 
       await recordAudit(tx, {
@@ -254,12 +273,11 @@ export async function applyCalendarPeriod(
           opensAt: periodo.opensAt,
           closesAt: periodo.closesAt,
           capacity: periodo.capacity,
-          overwrite: periodo.overwrite,
         },
         data: {
-          created: resultado.created,
-          updated: resultado.updated,
-          skipped: resultado.skipped,
+          opened: resultado.opened,
+          closed: resultado.closed,
+          unchanged: resultado.unchanged,
           conflicts: resultado.conflicts.length,
         },
         meta,

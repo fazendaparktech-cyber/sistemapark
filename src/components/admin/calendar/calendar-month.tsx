@@ -6,8 +6,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { api, ApiError, errorMessage } from '@/lib/api-client';
-import { weekdayOf } from '@/lib/dates';
-import { formatNumber, formatPercent } from '@/lib/format';
+import { addDays, diffDays, isDateOnly, weekdayOf } from '@/lib/dates';
+import { formatNumber, formatPercent, plural } from '@/lib/format';
 import { formatBRL } from '@/lib/money';
 import { DAY_KIND_LABELS, type DayKind } from '@/lib/pricing';
 import { formatDateLong, WEEKDAY_SHORT_LABELS } from '@/lib/weekdays';
@@ -17,7 +17,7 @@ import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogContent, DialogTrigger } from '../../ui/dialog';
 import { Spinner } from '../../ui/feedback';
-import { Checkbox, Field, fieldIds, Input, Select, Textarea } from '../../ui/field';
+import { Field, fieldIds, Input, Select, Textarea } from '../../ui/field';
 import { MoneyInput } from '../../ui/money-input';
 
 export interface CalendarCell {
@@ -388,10 +388,24 @@ function DiaDialog({
 }
 
 interface ResultadoDoPeriodo {
-  created: number;
-  updated: number;
-  skipped: number;
+  opened: number;
+  closed: number;
+  unchanged: number;
   conflicts: { date: string; reason: string }[];
+}
+
+function dataCurta(data: string): string {
+  return data.split('-').reverse().slice(0, 2).join('/');
+}
+
+/** Quantos dias do período caem nos dias da semana escolhidos e quantos ficam de fora. */
+function contarDias(de: string, ate: string, dias: number[]): { escolhidos: number; outros: number } | null {
+  if (!isDateOnly(de) || !isDateOnly(ate) || de > ate) return null;
+  const total = diffDays(de, ate) + 1;
+  if (total > 400) return null;
+  let escolhidos = 0;
+  for (let i = 0; i < total; i++) if (dias.includes(weekdayOf(addDays(de, i)))) escolhidos += 1;
+  return { escolhidos, outros: total - escolhidos };
 }
 
 export function PeriodDialog({
@@ -412,11 +426,11 @@ export function PeriodDialog({
   const [abre, setAbre] = useState(defaults.opensAt);
   const [fecha, setFecha] = useState(defaults.closesAt);
   const [lotacao, setLotacao] = useState(String(defaults.capacity));
-  const [substituir, setSubstituir] = useState(false);
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoDoPeriodo | null>(null);
+  const previa = contarDias(de, ate, dias);
 
   function mudarAbertura(novo: boolean) {
     if (enviando) return;
@@ -445,7 +459,6 @@ export function PeriodDialog({
           opensAt: status === 'OPEN' ? abre || null : null,
           closesAt: status === 'OPEN' ? fecha || null : null,
           capacity: Number(lotacao || 0),
-          overwrite: substituir,
         },
       });
       setResultado(resposta);
@@ -470,24 +483,18 @@ export function PeriodDialog({
         description={
           resultado
             ? undefined
-            : 'Abra ou feche vários dias de uma vez, com horário e capacidade. Dias com vendas nunca são fechados nem reduzidos abaixo do vendido.'
+            : 'Escolha o período e os dias da semana em que o parque abre. Os outros dias do período ficam fechados.'
         }
         size="md"
       >
         {resultado ? (
           <div className="grid gap-4">
-            <ul className="grid gap-1.5 text-sm text-ink-700">
-              <li>
-                <span className="tabular font-semibold text-ink-900">{resultado.created}</span> dias
-                configurados pela primeira vez
-              </li>
-              <li>
-                <span className="tabular font-semibold text-ink-900">{resultado.updated}</span> dias alterados
-              </li>
-              <li>
-                <span className="tabular font-semibold text-ink-900">{resultado.skipped}</span> dias já
-                configurados mantidos
-              </li>
+            <ul className="tabular grid gap-1.5 text-sm text-ink-700">
+              <li>{plural(resultado.opened, 'dia aberto', 'dias abertos')}</li>
+              <li>{plural(resultado.closed, 'dia fechado', 'dias fechados')}</li>
+              {resultado.unchanged > 0 ? (
+                <li>{plural(resultado.unchanged, 'dia já estava assim', 'dias já estavam assim')}</li>
+              ) : null}
             </ul>
             {resultado.conflicts.length > 0 ? (
               <Alert tone="warning" title={`${resultado.conflicts.length} dias não foram alterados`}>
@@ -523,8 +530,34 @@ export function PeriodDialog({
                 />
               </Field>
             </div>
+            <div role="radiogroup" aria-label="Situação dos dias" className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['OPEN', 'Abrir dias'],
+                  ['CLOSED', 'Fechar dias'],
+                ] as const
+              ).map(([valor, texto]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  role="radio"
+                  aria-checked={status === valor}
+                  onClick={() => setStatus(valor)}
+                  className={cn(
+                    'h-10 rounded-xl text-sm font-semibold ring-1 ring-inset transition-colors',
+                    status === valor
+                      ? 'bg-pool-50 text-pool-800 ring-pool-600'
+                      : 'bg-white text-ink-600 ring-ink-200 hover:bg-ink-50',
+                  )}
+                >
+                  {texto}
+                </button>
+              ))}
+            </div>
             <div className="grid gap-2">
-              <p className="text-[13px] font-semibold text-ink-800">Dias da semana</p>
+              <p className="text-[13px] font-semibold text-ink-800">
+                {status === 'OPEN' ? 'Dias em que o parque abre' : 'Dias que vão fechar'}
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {WEEKDAY_SHORT_LABELS.map((texto, dia) => (
                   <button
@@ -550,30 +583,6 @@ export function PeriodDialog({
               {campos.weekdays ? (
                 <p className="text-[13px] font-medium text-danger-700">{campos.weekdays}</p>
               ) : null}
-            </div>
-            <div role="radiogroup" aria-label="Situação dos dias" className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  ['OPEN', 'Abrir'],
-                  ['CLOSED', 'Fechar'],
-                ] as const
-              ).map(([valor, texto]) => (
-                <button
-                  key={valor}
-                  type="button"
-                  role="radio"
-                  aria-checked={status === valor}
-                  onClick={() => setStatus(valor)}
-                  className={cn(
-                    'h-10 rounded-xl text-sm font-semibold ring-1 ring-inset transition-colors',
-                    status === valor
-                      ? 'bg-pool-50 text-pool-800 ring-pool-600'
-                      : 'bg-white text-ink-600 ring-ink-200 hover:bg-ink-50',
-                  )}
-                >
-                  {texto}
-                </button>
-              ))}
             </div>
             {status === 'OPEN' ? (
               <div className="grid gap-4 sm:grid-cols-3">
@@ -603,19 +612,32 @@ export function PeriodDialog({
                 </Field>
               </div>
             ) : null}
-            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-800">
-              <Checkbox
-                checked={substituir}
-                onChange={(evento) => setSubstituir(evento.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                Substituir dias já configurados
-                <span className="block text-[13px] text-ink-500">
-                  Desmarcado, só configura os dias ainda em branco.
-                </span>
-              </span>
-            </label>
+            {previa ? (
+              <p className="rounded-xl bg-ink-50 px-3 py-2.5 text-[13px] leading-5 text-ink-700 ring-1 ring-inset ring-ink-200/70">
+                {status === 'OPEN' ? (
+                  <>
+                    De {dataCurta(de)} a {dataCurta(ate)}:{' '}
+                    <strong className="text-ink-900">
+                      {plural(previa.escolhidos, 'dia aberto', 'dias abertos')}
+                    </strong>{' '}
+                    e{' '}
+                    <strong className="text-ink-900">
+                      {plural(previa.outros, 'dia fechado', 'dias fechados')}
+                    </strong>
+                    .
+                  </>
+                ) : (
+                  <>
+                    De {dataCurta(de)} a {dataCurta(ate)}:{' '}
+                    <strong className="text-ink-900">
+                      {plural(previa.escolhidos, 'dia fecha', 'dias fecham')}
+                    </strong>
+                    . Os outros não mudam.
+                  </>
+                )}{' '}
+                Dias com ingressos vendidos não são fechados.
+              </p>
+            ) : null}
             <div className="flex flex-col-reverse gap-2 border-t border-ink-100 pt-5 sm:flex-row sm:justify-end">
               <Button variant="secondary" onClick={() => mudarAbertura(false)} disabled={enviando}>
                 Cancelar
@@ -651,10 +673,10 @@ export function CalendarMonth({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-ink-200/70">
-        <div className="grid grid-cols-7 border-b border-ink-100 bg-ink-50/70">
+      <div className="overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-ink-200">
+        <div className="grid grid-cols-7 border-b border-ink-200 bg-ink-50">
           {WEEKDAY_SHORT_LABELS.map((dia) => (
-            <p key={dia} className="py-2.5 text-center text-xs font-semibold text-ink-500">
+            <p key={dia} className="py-2 text-center text-xs font-semibold text-ink-700">
               {dia}
             </p>
           ))}
@@ -663,7 +685,7 @@ export function CalendarMonth({
           {Array.from({ length: vazios }, (_, indice) => (
             <div
               key={`vazio-${indice}`}
-              className="min-h-16 border-b border-r border-ink-100 bg-ink-50/30 sm:min-h-28"
+              className="min-h-14 border-b border-r border-ink-200 bg-ink-50/60 sm:min-h-[5.5rem]"
             />
           ))}
           {days.map((dia) => {
@@ -686,86 +708,105 @@ export function CalendarMonth({
                 key={dia.date}
                 type="button"
                 onClick={() => setSelecionado(dia)}
-                aria-label={`${formatDateLong(dia.date)}: ${situacao}. ${canManage ? 'Editar dia' : 'Ver dia'}`}
+                aria-label={`${formatDateLong(dia.date)}${passado ? ' (já passou)' : ''}: ${situacao}. ${canManage ? 'Editar dia' : 'Ver dia'}`}
                 className={cn(
-                  'flex min-h-16 flex-col border-b border-r border-ink-100 p-1.5 text-left transition-colors hover:bg-pool-50/60 focus-visible:relative focus-visible:z-10 sm:min-h-28 sm:p-2',
-                  dia.status === 'CLOSED' && 'bg-ink-50/80',
-                  passado && 'opacity-55',
+                  'flex min-h-14 flex-col border-b border-r border-ink-200 p-1.5 text-left transition-colors focus-visible:relative focus-visible:z-10 sm:min-h-[5.5rem] sm:p-2',
+                  passado
+                    ? 'bg-ink-50 hover:bg-ink-100'
+                    : aberto
+                      ? 'bg-white hover:bg-pool-50'
+                      : dia.status === 'CLOSED'
+                        ? 'bg-ink-50/60 hover:bg-ink-100'
+                        : 'bg-white hover:bg-ink-50',
                 )}
               >
-                <div className="flex items-start justify-between gap-1">
-                  <span
-                    className={cn(
-                      'tabular grid size-6 place-items-center rounded-full text-[13px] font-semibold',
-                      dia.date === today ? 'bg-pool-700 text-white' : 'text-ink-800',
-                    )}
-                  >
-                    {Number(dia.date.slice(8))}
-                  </span>
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'mt-1.5 size-2 rounded-full sm:hidden',
-                      aberto
-                        ? esgotado
-                          ? 'bg-danger-600'
-                          : 'bg-success-600'
-                        : dia.status === 'CLOSED'
-                          ? 'bg-ink-300'
-                          : 'bg-transparent ring-1 ring-ink-300',
-                    )}
-                  />
-                  {precoEspecial ? (
-                    <span className="hidden rounded bg-sun-100 px-1 text-[10px] font-semibold text-sun-800 sm:inline">
-                      Preço especial
+                <div className={cn('flex flex-1 flex-col', passado && 'opacity-45')}>
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={cn(
+                        'tabular grid size-6 place-items-center rounded-full text-[13px] font-semibold',
+                        dia.date === today
+                          ? 'bg-pool-700 text-white'
+                          : passado
+                            ? 'text-ink-600 line-through'
+                            : 'text-ink-900',
+                      )}
+                    >
+                      {Number(dia.date.slice(8))}
                     </span>
-                  ) : null}
-                </div>
-                {aberto ? (
-                  <p className="tabular mt-0.5 text-[10px] font-semibold text-ink-500 sm:hidden">
-                    {Math.round(ocupacao)}%
-                  </p>
-                ) : null}
-                <div className="mt-1.5 hidden gap-0.5 text-[11px] leading-4 sm:grid">
-                  {aberto ? (
-                    <>
-                      {dia.opensAt && dia.closesAt ? (
-                        <p className="tabular text-ink-500">
-                          {dia.opensAt} às {dia.closesAt}
-                        </p>
+                    <span className="flex items-center gap-1">
+                      {precoEspecial ? (
+                        <span className="hidden rounded bg-sun-100 px-1 text-[10px] font-semibold leading-4 text-sun-800 sm:inline">
+                          R$
+                        </span>
                       ) : null}
-                      <p className="tabular flex items-baseline justify-between gap-1 text-ink-600">
-                        <span>
-                          <span className="font-semibold text-ink-900">{formatNumber(dia.sold)}</span>{' '}
-                          vendidos
-                        </span>
-                        <span className={esgotado ? 'font-semibold text-danger-700' : 'text-ink-500'}>
-                          {esgotado ? 'Esgotado' : `${Math.round(ocupacao)}%`}
-                        </span>
-                      </p>
-                    </>
-                  ) : dia.status === 'CLOSED' ? (
-                    <p className="text-ink-400">Fechado</p>
-                  ) : (
-                    <p className="font-medium text-warning-700">Sem configuração</p>
-                  )}
-                  {especial ? (
-                    <p className="truncate font-semibold text-grape-700">
-                      {dia.label ?? DAY_KIND_LABELS[dia.dayKind]}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'size-2 rounded-full',
+                          aberto
+                            ? esgotado
+                              ? 'bg-danger-600'
+                              : 'bg-success-600'
+                            : dia.status === 'CLOSED'
+                              ? 'bg-ink-300'
+                              : 'ring-1 ring-inset ring-ink-400',
+                        )}
+                      />
+                    </span>
+                  </div>
+                  {aberto ? (
+                    <p className="tabular mt-0.5 text-[10px] font-semibold text-ink-700 sm:hidden">
+                      {Math.round(ocupacao)}%
                     </p>
                   ) : null}
-                </div>
-                {aberto && capacidade > 0 ? (
-                  <div className="mt-auto h-1 overflow-hidden rounded-full bg-ink-100">
-                    <div
-                      className={cn(
-                        'h-full rounded-full',
-                        ocupacao >= 90 ? 'bg-danger-600' : ocupacao >= 80 ? 'bg-sun-400' : 'bg-pool-500',
-                      )}
-                      style={{ width: `${ocupacao}%` }}
-                    />
+                  <div className="mt-1 hidden gap-0.5 text-[11px] leading-4 sm:grid">
+                    {aberto ? (
+                      <>
+                        {dia.opensAt && dia.closesAt ? (
+                          <p className="tabular text-ink-600">
+                            {dia.opensAt} às {dia.closesAt}
+                          </p>
+                        ) : null}
+                        <p className="tabular flex items-baseline justify-between gap-1 text-ink-700">
+                          <span>
+                            <span className="font-semibold text-ink-900">{formatNumber(dia.sold)}</span>{' '}
+                            vendidos
+                          </span>
+                          <span
+                            className={
+                              esgotado ? 'font-semibold text-danger-700' : 'font-medium text-ink-700'
+                            }
+                          >
+                            {esgotado ? 'Esgotado' : `${Math.round(ocupacao)}%`}
+                          </span>
+                        </p>
+                      </>
+                    ) : dia.status === 'CLOSED' ? (
+                      <p className="font-medium text-ink-500">Fechado</p>
+                    ) : (
+                      <p className="font-medium text-warning-700">Sem configuração</p>
+                    )}
+                    {especial ? (
+                      <p className="truncate font-semibold text-grape-700">
+                        {dia.label ?? DAY_KIND_LABELS[dia.dayKind]}
+                      </p>
+                    ) : null}
                   </div>
-                ) : null}
+                  {aberto && capacidade > 0 ? (
+                    <div className="mt-auto pt-1.5">
+                      <div className="h-1 overflow-hidden rounded-full bg-ink-200/70">
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            ocupacao >= 90 ? 'bg-danger-600' : ocupacao >= 80 ? 'bg-sun-400' : 'bg-pool-600',
+                          )}
+                          style={{ width: `${ocupacao}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </button>
             );
           })}

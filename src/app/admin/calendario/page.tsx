@@ -29,7 +29,7 @@ const LEGENDA = [
   { rotulo: 'Aberto', classe: 'bg-success-600' },
   { rotulo: 'Esgotado', classe: 'bg-danger-600' },
   { rotulo: 'Fechado', classe: 'bg-ink-300' },
-  { rotulo: 'Sem configuração', classe: 'ring-1 ring-ink-300' },
+  { rotulo: 'Sem configuração', classe: 'ring-1 ring-inset ring-ink-400' },
 ];
 
 export default async function CalendarioPage({
@@ -90,29 +90,6 @@ export default async function CalendarioPage({
         }
       />
 
-      <section aria-label="Resumo do mês" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <MetricCard
-          label="Dias abertos"
-          value={formatNumber(abertos.length)}
-          hint={`de ${dias.length} dias · ${plural(fechados, 'fechado', 'fechados')}`}
-          icon={CalendarCheck}
-        />
-        <MetricCard
-          label="Ingressos vendidos"
-          value={formatNumber(vendidos)}
-          hint={
-            lotacao > 0 ? `${formatPercent(vendidos / lotacao)} da capacidade do mês` : 'nenhum dia aberto'
-          }
-          icon={Ticket}
-        />
-        <MetricCard
-          label="Vagas livres"
-          value={formatNumber(vagasLivres)}
-          hint={fim < hoje ? 'mês encerrado' : 'nos dias abertos a partir de hoje'}
-          icon={Users}
-        />
-      </section>
-
       {semConfiguracao > 0 ? (
         <Alert tone="warning" title={`${plural(semConfiguracao, 'dia', 'dias')} sem configuração`}>
           Esses dias não aparecem para venda.{' '}
@@ -120,49 +97,93 @@ export default async function CalendarioPage({
         </Alert>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/admin/calendario?mes=${mesDeslocado(mes, -1)}`}
-            className={buttonClasses('secondary', 'icon')}
-            aria-label="Mês anterior"
-          >
-            <ChevronLeft className="size-4" aria-hidden />
-          </Link>
-          <h2 className="min-w-44 text-center font-display text-lg font-semibold text-ink-900">
-            {formatMonthYear(mes).replace(/^./, (letra) => letra.toUpperCase())}
-          </h2>
-          <Link
-            href={`/admin/calendario?mes=${mesDeslocado(mes, 1)}`}
-            className={buttonClasses('secondary', 'icon')}
-            aria-label="Próximo mês"
-          >
-            <ChevronRight className="size-4" aria-hidden />
-          </Link>
-          {mes !== hoje.slice(0, 7) ? (
-            <Link href="/admin/calendario" className={buttonClasses('ghost', 'sm')}>
-              Hoje
-            </Link>
-          ) : null}
-        </div>
-        {/* No celular os dias mostram só um ponto colorido; no computador o texto já diz a situação. */}
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500 sm:hidden">
-          {LEGENDA.map((item) => (
-            <li key={item.rotulo} className="inline-flex items-center gap-1.5">
-              <span aria-hidden className={`size-2 rounded-full ${item.classe}`} />
-              {item.rotulo}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
+        <div className="grid min-w-0 gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/admin/calendario?mes=${mesDeslocado(mes, -1)}`}
+                className={buttonClasses('secondary', 'icon')}
+                aria-label="Mês anterior"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+              </Link>
+              <h2 className="min-w-44 text-center font-display text-lg font-semibold text-ink-900">
+                {formatMonthYear(mes).replace(/^./, (letra) => letra.toUpperCase())}
+              </h2>
+              <Link
+                href={`/admin/calendario?mes=${mesDeslocado(mes, 1)}`}
+                className={buttonClasses('secondary', 'icon')}
+                aria-label="Próximo mês"
+              >
+                <ChevronRight className="size-4" aria-hidden />
+              </Link>
+              {mes !== hoje.slice(0, 7) ? (
+                <Link href="/admin/calendario" className={buttonClasses('ghost', 'sm')}>
+                  Hoje
+                </Link>
+              ) : null}
+            </div>
+            <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-600">
+              {LEGENDA.map((item) => (
+                <li key={item.rotulo} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className={`size-2 rounded-full ${item.classe}`} />
+                  {item.rotulo}
+                </li>
+              ))}
+              <li className="hidden items-center gap-1.5 sm:inline-flex">
+                <span
+                  aria-hidden
+                  className="rounded bg-sun-100 px-1 text-[10px] font-semibold leading-4 text-sun-800"
+                >
+                  R$
+                </span>
+                Preço especial
+              </li>
+              <li className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="tabular font-semibold text-ink-500 line-through">
+                  12
+                </span>
+                Já passou
+              </li>
+            </ul>
+          </div>
 
-      <CalendarMonth
-        days={dias}
-        today={hoje}
-        canManage={podeGerenciar}
-        defaults={padrao}
-        specialPriceDates={datasComPrecoEspecial}
-      />
+          <CalendarMonth
+            days={dias}
+            today={hoje}
+            canManage={podeGerenciar}
+            defaults={padrao}
+            specialPriceDates={datasComPrecoEspecial}
+          />
+        </div>
+
+        <section
+          aria-label="Resumo do mês"
+          className="grid grid-cols-1 gap-4 sm:order-first sm:grid-cols-3 xl:order-none xl:grid-cols-1"
+        >
+          <MetricCard
+            label="Dias abertos"
+            value={formatNumber(abertos.length)}
+            hint={`de ${dias.length} dias · ${plural(fechados, 'fechado', 'fechados')}`}
+            icon={CalendarCheck}
+          />
+          <MetricCard
+            label="Ingressos vendidos"
+            value={formatNumber(vendidos)}
+            hint={
+              lotacao > 0 ? `${formatPercent(vendidos / lotacao)} da capacidade do mês` : 'nenhum dia aberto'
+            }
+            icon={Ticket}
+          />
+          <MetricCard
+            label="Vagas livres"
+            value={formatNumber(vagasLivres)}
+            hint={fim < hoje ? 'mês encerrado' : 'nos dias abertos a partir de hoje'}
+            icon={Users}
+          />
+        </section>
+      </div>
     </div>
   );
 }
