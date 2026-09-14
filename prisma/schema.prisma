@@ -57,6 +57,7 @@ model Park {
   checkinAttempts CheckinAttempt[]
   notifications   Notification[]
   trackingEvents  TrackingEvent[]
+  financeEntries  FinanceEntry[]
 
   @@map("parks")
 }
@@ -105,6 +106,7 @@ model User {
   createdCoupons      Coupon[]
   checkinAttempts     CheckinAttempt[]
   notificationReads   NotificationRead[]
+  financeEntries      FinanceEntry[]
 
   @@index([status])
   @@map("users")
@@ -1173,4 +1175,37 @@ model TrackingEvent {
   @@index([parkId, type, createdAt])
   @@index([orderId])
   @@map("tracking_events")
+}
+
+enum FinanceEntryType {
+  INCOME
+  EXPENSE
+
+  @@map("finance_entry_type")
+}
+
+/// Lançamento manual do financeiro: receitas fora da venda de ingressos e despesas do parque.
+model FinanceEntry {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  parkId      String           @map("park_id") @db.Uuid
+  type        FinanceEntryType
+  /// Chave da categoria (lista fixa em src/lib/finance-entries.ts).
+  category    String           @db.VarChar(40)
+  description String           @db.VarChar(120)
+  /// Sempre positivo (CHECK na migration); o tipo diz se soma ou subtrai.
+  amountCents Int              @map("amount_cents")
+  /// Data de competência: quando a receita ou a despesa aconteceu.
+  date        DateTime         @db.Date
+  /// Falso: ainda a receber ou a pagar.
+  paid        Boolean          @default(true)
+  notes       String?          @db.VarChar(500)
+  createdById String?          @map("created_by_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  park      Park  @relation(fields: [parkId], references: [id], onDelete: Restrict)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([parkId, date])
+  @@map("finance_entries")
 }

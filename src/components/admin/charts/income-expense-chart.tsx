@@ -14,22 +14,22 @@ import {
 import { formatCompactBRL } from '@/lib/format';
 import { formatBRL } from '@/lib/money';
 
-export interface FinanceChartPoint {
+export interface IncomeExpensePoint {
   key: string;
   label: string;
-  grossCents: number;
-  refundsCents: number;
-  netCents: number;
+  incomeCents: number;
+  expensesCents: number;
+  resultCents: number;
 }
 
 const SERIES = [
-  { chave: 'grossCents', rotulo: 'Bruto', cor: '#9bd9e8' },
-  { chave: 'refundsCents', rotulo: 'Reembolsos', cor: '#7c5cc4' },
-  { chave: 'netCents', rotulo: 'Líquido', cor: '#146f83' },
+  { chave: 'incomeCents', rotulo: 'Receitas', cor: '#2bb3cf' },
+  { chave: 'expensesCents', rotulo: 'Despesas', cor: '#e0776a' },
+  { chave: 'resultCents', rotulo: 'Resultado', cor: '#2d2a3e' },
 ] as const;
 
 function Dica({ active, payload }: { active?: boolean; payload?: readonly { payload?: unknown }[] }) {
-  const ponto = payload?.[0]?.payload as FinanceChartPoint | undefined;
+  const ponto = payload?.[0]?.payload as IncomeExpensePoint | undefined;
   if (!active || !ponto) return null;
   return (
     <div className="rounded-xl bg-white px-3 py-2 text-sm shadow-pop ring-1 ring-ink-200">
@@ -45,8 +45,8 @@ function Dica({ active, payload }: { active?: boolean; payload?: readonly { payl
   );
 }
 
-/** Receita por dia: bruto e reembolsos em barras, líquido em linha. */
-export function FinanceChart({ points }: { points: FinanceChartPoint[] }) {
+/** Receitas e despesas por mês em barras, resultado em linha. */
+export function IncomeExpenseChart({ points }: { points: IncomeExpensePoint[] }) {
   return (
     <div>
       <div className="flex flex-wrap justify-end gap-4 text-xs text-ink-500">
@@ -66,7 +66,6 @@ export function FinanceChart({ points }: { points: FinanceChartPoint[] }) {
               tickLine={false}
               axisLine={false}
               tick={{ fill: '#716c87', fontSize: 12 }}
-              minTickGap={20}
             />
             <YAxis
               tickLine={false}
@@ -77,15 +76,15 @@ export function FinanceChart({ points }: { points: FinanceChartPoint[] }) {
               tickFormatter={(valor: number) => formatCompactBRL(valor)}
             />
             <Tooltip cursor={{ fill: '#f5f4f8' }} content={<Dica />} />
-            <Bar dataKey="grossCents" fill={SERIES[0].cor} radius={[4, 4, 0, 0]} maxBarSize={22} />
-            <Bar dataKey="refundsCents" fill={SERIES[1].cor} radius={[4, 4, 0, 0]} maxBarSize={22} />
+            <Bar dataKey="incomeCents" fill={SERIES[0].cor} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            <Bar dataKey="expensesCents" fill={SERIES[1].cor} radius={[4, 4, 0, 0]} maxBarSize={32} />
             <Line
               type="monotone"
               isAnimationActive={false}
-              dataKey="netCents"
+              dataKey="resultCents"
               stroke={SERIES[2].cor}
               strokeWidth={2.25}
-              dot={false}
+              dot={{ r: 3, fill: SERIES[2].cor, strokeWidth: 0 }}
               activeDot={{ r: 4, fill: SERIES[2].cor, stroke: '#fff', strokeWidth: 2 }}
             />
           </ComposedChart>

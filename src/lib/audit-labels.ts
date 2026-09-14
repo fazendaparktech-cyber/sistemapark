@@ -55,6 +55,9 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'settings.operations_updated': 'Alterou o funcionamento padrão',
   'settings.logo_updated': 'Enviou a logo do parque',
   'settings.logo_removed': 'Removeu a logo do parque',
+  'finance.entry_created': 'Lançou receita ou despesa',
+  'finance.entry_updated': 'Alterou lançamento financeiro',
+  'finance.entry_deleted': 'Excluiu lançamento financeiro',
 };
 
 export const AUDIT_REASON_LABELS: Readonly<Record<string, string>> = {
@@ -69,6 +72,7 @@ export const AUDIT_ACTION_GROUPS = [
   { value: 'auth.', label: 'Acesso ao sistema' },
   { value: 'orders.', label: 'Vendas' },
   { value: 'payments.', label: 'Pagamentos' },
+  { value: 'finance.', label: 'Financeiro' },
   { value: 'customers.', label: 'Clientes' },
   { value: 'reports.', label: 'Relatórios' },
   { value: 'marketing.', label: 'Marketing' },

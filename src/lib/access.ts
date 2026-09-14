@@ -70,6 +70,7 @@ export const PERMISSION_GROUPS = [
     label: 'Financeiro',
     permissions: [
       { key: 'finance.view', label: 'Ver o financeiro e consultar pagamentos' },
+      { key: 'finance.manage', label: 'Lançar receitas e despesas' },
       { key: 'refunds.approve', label: 'Fazer reembolsos' },
       { key: 'reports.view', label: 'Ver relatórios' },
       { key: 'reports.export', label: 'Exportar relatórios e planilhas' },
@@ -126,7 +127,15 @@ export function isPermissionKey(value: string): value is PermissionKey {
   return (ALL_PERMISSIONS as readonly string[]).includes(value);
 }
 
-export const ROLE_KEYS = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE', 'BOX_OFFICE', 'GATE', 'MARKETING'] as const;
+export const ROLE_KEYS = [
+  'SUPER_ADMIN',
+  'ADMIN',
+  'MANAGER',
+  'FINANCE',
+  'BOX_OFFICE',
+  'GATE',
+  'MARKETING',
+] as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
@@ -146,7 +155,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
     key: 'SUPER_ADMIN',
     name: 'Super admin',
-    description: 'Dono do sistema: acesso total, inclusive para nomear outros super admins. Não pode ser editado.',
+    description:
+      'Dono do sistema: acesso total, inclusive para nomear outros super admins. Não pode ser editado.',
     permissions: 'ALL',
   },
   {
@@ -158,7 +168,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
     key: 'MANAGER',
     name: 'Gerente',
-    description: 'Opera o parque no dia a dia: vendas, ingressos, clientes, calendário, portaria e relatórios.',
+    description:
+      'Opera o parque no dia a dia: vendas, ingressos, clientes, calendário, portaria e relatórios.',
     permissions: [
       'dashboard.view',
       'dashboard.financial',
@@ -201,6 +212,7 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'customers.view',
       'coupons.view',
       'finance.view',
+      'finance.manage',
       'refunds.approve',
       'reports.view',
       'reports.export',

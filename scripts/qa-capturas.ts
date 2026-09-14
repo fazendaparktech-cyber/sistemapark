@@ -74,6 +74,8 @@ async function paginas(parkId: string): Promise<{ nome: string; caminho: string 
     ...(bilhete ? [{ nome: 'ingresso', caminho: `/admin/ingressos/${bilhete.id}` }] : []),
     { nome: 'portaria', caminho: '/admin/portaria' },
     { nome: 'financeiro', caminho: '/admin/financeiro' },
+    { nome: 'financeiro-ingressos', caminho: '/admin/financeiro/ingressos' },
+    { nome: 'financeiro-lancamentos', caminho: '/admin/financeiro/lancamentos' },
     { nome: 'relatorios', caminho: '/admin/relatorios' },
     { nome: 'relatorio-vendas', caminho: '/admin/relatorios/vendas' },
     { nome: 'relatorio-visitantes', caminho: '/admin/relatorios/visitantes' },
