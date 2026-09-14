@@ -205,18 +205,6 @@ export function AdminShell({
   children: ReactNode;
 }) {
   const [gavetaAberta, setGavetaAberta] = useState(false);
-  const pathname = usePathname();
-  // Página atual no topo: o item do menu que mais combina com o endereço.
-  const atual = nav
-    .flatMap((secao) =>
-      secao.items.map((item) => ({ secao: secao.label, pagina: item.label, href: item.href })),
-    )
-    .filter((item) =>
-      item.href === '/admin'
-        ? pathname === '/admin'
-        : pathname === item.href || pathname.startsWith(`${item.href}/`),
-    )
-    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
@@ -234,7 +222,7 @@ export function AdminShell({
 
       <div className="flex min-w-0 flex-col">
         <div className="sticky top-0 z-40 px-3 pt-3 sm:px-4 lg:pl-5 lg:pt-4">
-          <header className="flex h-16 items-center justify-between gap-3 rounded-2xl bg-white/90 px-3 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60 backdrop-blur sm:px-4">
+          <header className="flex h-16 items-center gap-3 rounded-2xl bg-white/90 px-3 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60 backdrop-blur sm:px-4">
             <div className="flex items-center gap-1.5 lg:hidden">
               <Gaveta.Root open={gavetaAberta} onOpenChange={setGavetaAberta}>
                 <Gaveta.Trigger
@@ -271,17 +259,12 @@ export function AdminShell({
               </Link>
             </div>
 
-            <div className="hidden min-w-0 lg:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-                {atual?.secao || parkName}
-              </p>
-              <p className="truncate font-display text-[17px] font-semibold tracking-[-0.01em] text-ink-900">
-                {atual?.pagina ?? 'Painel'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1 sm:gap-2">
-              {canSearch ? <GlobalSearch /> : null}
+            {canSearch ? (
+              <div className="ml-auto lg:ml-0">
+                <GlobalSearch />
+              </div>
+            ) : null}
+            <div className="ml-auto flex items-center gap-1 sm:gap-2">
               <NotificationBell timeZone={timeZone} />
               <span aria-hidden className="mx-1 hidden h-8 w-px bg-ink-200 sm:block" />
               <MenuDaConta user={user} />
