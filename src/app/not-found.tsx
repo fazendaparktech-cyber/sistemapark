@@ -19,8 +19,8 @@ export default function NotFound() {
           <Link href="/" className={buttonClasses('secondary')}>
             Página inicial
           </Link>
-          <Link href="/admin" className={buttonClasses('primary')}>
-            Ir para o painel
+          <Link href="/comprar" className={buttonClasses('cta')}>
+            Comprar ingressos
           </Link>
         </div>
       </div>

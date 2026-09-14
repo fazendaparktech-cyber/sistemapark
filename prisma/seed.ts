@@ -15,6 +15,7 @@ import { prisma } from '@/server/db';
 import { ensurePark } from '@/server/parks/service';
 
 import { databaseTarget } from '../scripts/lib/database-target';
+import { seedVendas } from './seed-vendas';
 
 /** Só existe no banco local de desenvolvimento. */
 const SENHA_DEV = 'Parque-Dev-2026!';
@@ -72,9 +73,22 @@ async function main(): Promise<void> {
     });
   }
 
+  const idPorEmail = async (email: string) =>
+    (await prisma.user.findUnique({ where: { email }, select: { id: true } }))?.id ?? null;
+  const resumoDeVendas = await seedVendas(
+    prisma,
+    { id: parque.id, timezone: parque.timezone, orderCodePrefix: parque.orderCodePrefix },
+    {
+      admin: await idPorEmail('admin@conquistapark.dev'),
+      bilheteria: await idPorEmail('bilheteria@conquistapark.dev'),
+      portaria: await idPorEmail('portaria@conquistapark.dev'),
+    },
+  );
+
   console.log(`\nSeed aplicado em ${alvo.host}/${alvo.database} — parque ${parque.name}.`);
   console.log(`Equipe (senha de desenvolvimento: ${SENHA_DEV}):`);
   for (const pessoa of EQUIPE) console.log(`  ${pessoa.email.padEnd(32)} ${pessoa.roles.join(', ')}`);
+  console.log(resumoDeVendas);
 }
 
 main()

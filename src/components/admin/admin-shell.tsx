@@ -1,15 +1,22 @@
 'use client';
 
 import {
+  CalendarDays,
   ChevronDown,
   ClipboardList,
+  ExternalLink,
   KeyRound,
   LayoutDashboard,
   LogOut,
   MapPin,
   Menu,
+  ReceiptText,
+  Settings,
   ShieldCheck,
+  Ticket,
+  TicketPercent,
   Users,
+  UsersRound,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -25,9 +32,15 @@ import type { AdminIcon, AdminNavSection } from './nav';
 
 const ICONES: Record<AdminIcon, LucideIcon> = {
   overview: LayoutDashboard,
+  orders: ReceiptText,
+  customers: UsersRound,
+  coupons: TicketPercent,
+  tickets: Ticket,
+  calendar: CalendarDays,
   team: Users,
   permissions: ShieldCheck,
   audit: ClipboardList,
+  settings: Settings,
 };
 
 interface ShellUser {
@@ -168,11 +181,14 @@ function MenuDaConta({ user }: { user: ShellUser }) {
 export function AdminShell({
   nav,
   parkName,
+  salesUrl,
   user,
   children,
 }: {
   nav: AdminNavSection[];
   parkName: string;
+  /** Página pública de compra, aberta em outra aba. */
+  salesUrl: string;
   user: ShellUser;
   children: ReactNode;
 }) {
@@ -232,7 +248,19 @@ export function AdminShell({
             Painel · <span className="font-semibold text-ink-800">{parkName}</span>
           </p>
 
-          <MenuDaConta user={user} />
+          <div className="flex items-center gap-2">
+            <a
+              href={salesUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-pool-800 transition-colors hover:bg-pool-50"
+            >
+              <ExternalLink className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Página de vendas</span>
+              <span className="sr-only sm:hidden">Abrir a página de vendas</span>
+            </a>
+            <MenuDaConta user={user} />
+          </div>
         </header>
 
         <main

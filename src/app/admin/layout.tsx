@@ -6,6 +6,7 @@ import { AdminShell } from '@/components/admin/admin-shell';
 import { navFor } from '@/components/admin/nav';
 import { roleDefinition } from '@/lib/access';
 import { requirePageAuth } from '@/server/auth/guards';
+import { env } from '@/server/env';
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -20,6 +21,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     <AdminShell
       nav={navFor(auth.permissions)}
       parkName={auth.park.name}
+      salesUrl={`${env().APP_URL}/comprar`}
       user={{
         name: auth.user.name,
         email: auth.user.email,

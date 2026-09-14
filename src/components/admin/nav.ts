@@ -2,11 +2,20 @@ import type { PermissionKey } from '@/lib/access';
 
 /**
  * Menu do painel. Cada item só aparece para quem tem a permissão — e a própria
- * página confere de novo no servidor. Módulos novos entram aqui quando ficam
- * prontos, nunca antes.
+ * página confere de novo no servidor.
  */
 
-export type AdminIcon = 'overview' | 'team' | 'permissions' | 'audit';
+export type AdminIcon =
+  | 'overview'
+  | 'orders'
+  | 'customers'
+  | 'coupons'
+  | 'tickets'
+  | 'calendar'
+  | 'team'
+  | 'permissions'
+  | 'audit'
+  | 'settings';
 
 export interface AdminNavItem {
   href: string;
@@ -23,7 +32,27 @@ export interface AdminNavSection {
 export const ADMIN_NAV: readonly AdminNavSection[] = [
   {
     label: 'Geral',
-    items: [{ href: '/admin', label: 'Visão geral', icon: 'overview', permission: null }],
+    items: [{ href: '/admin', label: 'Painel', icon: 'overview', permission: null }],
+  },
+  {
+    label: 'Vendas',
+    items: [
+      { href: '/admin/pedidos', label: 'Pedidos', icon: 'orders', permission: 'orders.view' },
+      { href: '/admin/clientes', label: 'Clientes', icon: 'customers', permission: 'customers.view' },
+      { href: '/admin/cupons', label: 'Cupons', icon: 'coupons', permission: 'coupons.view' },
+    ],
+  },
+  {
+    label: 'Parque',
+    items: [
+      {
+        href: '/admin/ingressos',
+        label: 'Ingressos e preços',
+        icon: 'tickets',
+        permission: 'ticket_types.view',
+      },
+      { href: '/admin/calendario', label: 'Calendário', icon: 'calendar', permission: 'calendar.view' },
+    ],
   },
   {
     label: 'Administração',
@@ -31,6 +60,7 @@ export const ADMIN_NAV: readonly AdminNavSection[] = [
       { href: '/admin/equipe', label: 'Equipe', icon: 'team', permission: 'users.view' },
       { href: '/admin/permissoes', label: 'Permissões', icon: 'permissions', permission: 'users.view' },
       { href: '/admin/auditoria', label: 'Auditoria', icon: 'audit', permission: 'audit.view' },
+      { href: '/admin/configuracoes', label: 'Configurações', icon: 'settings', permission: 'settings.view' },
     ],
   },
 ];

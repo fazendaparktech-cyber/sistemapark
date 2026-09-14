@@ -1011,3 +1011,31 @@ descrito no README.
 | Domínio e e-mail remetente | Links, e-mails e cookies seguros | Fase 5 |
 | Cadastro na Meta (Business + WhatsApp) | Aprovação leva dias | Começar já; usar na fase 9 |
 | Plano Pro do Supabase e hospedagem | Backup e uso comercial | Antes de vender (fase 11) |
+
+---
+
+## 18. Registro de entregas
+
+### 13/09/2026 — venda online e painel de gestão
+
+Entregue: calendário, tipos de ingresso e regras de preço (fase 2); site, carrinho, checkout e cupom (fase 3);
+pedidos, PIX com provedor de teste, webhook, vencimento e pagamento tardio (fase 4); QR assinado, página do
+pedido e e-mails (fase 5, sem PDF e sem reemissão); painel de vendas (parte da fase 7); clientes, cupons,
+cancelamento e reembolso total pelo painel (parte da fase 8).
+
+Decisões tomadas na implementação:
+
+| Tema | Decisão |
+|---|---|
+| Organização do código | Um módulo por pasta em `src/server/<módulo>` (catalog, calendar, sales, payments, orders, customers, coupons, dashboard, settings); regras puras em `src/lib` |
+| Reserva de vagas | O carrinho segura as vagas pelo tempo configurado (padrão 15 min); a reserva passa para o pedido no checkout e vale pelo prazo do PIX (padrão 30 min). Reserva vencida deixa de contar na hora, sem depender da rotina |
+| Travas | Dia do parque, lotes de preço e cupom travados com `FOR UPDATE` dentro da transação da compra; numeração do pedido pela linha de `order_sequences`, sem buraco |
+| CPF | Obrigatório para o comprador (cobrança PIX e identificação do cliente). Guardado como HMAC e mascarado; cadastro existente não é sobrescrito por nova compra |
+| Pagamento tardio (requisito 16.2) | Com vaga, confirma. Sem vaga, o pedido fica vencido e marcado como pago, com alerta "Pagamentos a devolver" no painel; o reembolso é feito pelo painel. O reembolso automático fica para quando o provedor real estiver ligado |
+| Pagamento perdido | Antes de vencer um pedido, a rotina consulta o provedor e confirma se o pagamento entrou |
+| Reembolso | Total, por pedido, sem entradas registradas, com o pagamento travado durante a chamada ao provedor. Parcial e por ingresso ficam para a fase 8 |
+| Indicadores | Venda conta no dia da confirmação do pagamento, no fuso do parque; cortesia não entra em receita nem em ingressos vendidos; valores em dinheiro só com `dashboard.financial` |
+| Origem das vendas | UTM e referrer gravados no pedido (primeiro acesso da sessão); o painel mostra vendas por origem e cupom |
+| Link do pedido | `/pedido/<número>?t=<token>`; "gerar novo link" troca `access_version` e invalida o anterior sem mudar os QR Codes |
+| Planilhas | CSV com separador ";" e BOM (Excel em português), com proteção contra injeção de fórmula; toda exportação de dado pessoal fica na auditoria |
+| Verificação visual | `scripts/qa-capturas.ts` (todas as telas, computador e celular) e `scripts/qa-compra.ts` (compra de ponta a ponta), só em banco local |
