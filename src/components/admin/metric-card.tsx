@@ -5,10 +5,10 @@ import { Card } from '../ui/card';
 import { cn } from '../ui/cn';
 
 const TONS = {
-  pool: 'bg-pool-50 text-pool-700 ring-pool-100',
-  grape: 'bg-grape-50 text-grape-600 ring-grape-100',
-  citrus: 'bg-citrus-100 text-citrus-700 ring-citrus-200',
-  sun: 'bg-sun-50 text-sun-700 ring-sun-100',
+  pool: 'bg-ink-50 text-ink-500 ring-ink-200/70',
+  grape: 'bg-ink-50 text-ink-500 ring-ink-200/70',
+  citrus: 'bg-ink-50 text-ink-500 ring-ink-200/70',
+  sun: 'bg-ink-50 text-ink-500 ring-ink-200/70',
 } as const;
 
 export function MetricCard({

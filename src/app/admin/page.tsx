@@ -1,9 +1,7 @@
 import {
   BadgePercent,
   CalendarRange,
-  CircleDashed,
   CircleDollarSign,
-  Clock,
   DoorOpen,
   Gauge,
   Globe,
@@ -14,7 +12,6 @@ import {
   UserPlus,
   UserRound,
   Users,
-  UsersRound,
   UserX,
   Wallet,
 } from 'lucide-react';
@@ -29,7 +26,6 @@ import { KpiCard } from '@/components/admin/kpi-card';
 import { KpiGrid } from '@/components/admin/kpi-grid';
 import { firstAllowedHref } from '@/components/admin/nav';
 import { PeriodFilter } from '@/components/admin/period-filter';
-import { SalesLink } from '@/components/admin/sales-link';
 import { ChannelBadge, SaleStatusBadge } from '@/components/admin/status-badges';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -47,7 +43,6 @@ import { formatShortDate, WEEKDAY_SHORT_LABELS } from '@/lib/weekdays';
 import { can } from '@/server/auth/context';
 import { requirePageAuth } from '@/server/auth/guards';
 import { getDashboard, type UpcomingDay } from '@/server/dashboard/metrics';
-import { env } from '@/server/env';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -213,55 +208,32 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             value={formatNumber(hoje.expected)}
             hint="ingressos válidos para hoje"
             icon={Users}
-            tone="citrus"
           />
           <KpiCard
-            label="Check-ins hoje"
+            label="Entradas hoje"
             value={formatNumber(hoje.checkedIn)}
             hint={
-              hoje.attendance !== null
-                ? `${formatPercent(hoje.attendance)} dos esperados`
-                : 'nenhuma entrada ainda'
+              hoje.expected > 0
+                ? `${formatPercent(hoje.attendance ?? 0)} dos esperados · ${formatNumber(hoje.notArrived)} ainda não chegaram`
+                : 'nenhum ingresso para hoje'
             }
             icon={DoorOpen}
-            tone="pool"
           />
           <KpiCard
-            label="Ainda não chegaram"
-            value={formatNumber(hoje.notArrived)}
-            hint="com ingresso para hoje"
-            icon={Clock}
-            tone="ink"
-          />
-          <KpiCard
-            label="Capacidade máxima"
-            value={hoje.capacity !== null ? formatNumber(hoje.capacity) : aberto ? 'Livre' : 'Fechado'}
-            hint="pessoas no dia"
-            icon={UsersRound}
-            tone="grape"
-          />
-          <KpiCard
-            label="Capacidade disponível"
-            value={hoje.available !== null ? formatNumber(hoje.available) : 'Sem venda'}
-            hint={
-              hoje.held > 0 ? `${formatNumber(hoje.held)} vagas em pagamento pendente` : 'vagas para vender'
+            label="Vagas livres hoje"
+            value={
+              !aberto ? 'Fechado' : hoje.available !== null ? formatNumber(hoje.available) : 'Sem limite'
             }
-            icon={CircleDashed}
-            tone="citrus"
-          />
-          <KpiCard
-            label="Ocupação"
-            value={hoje.occupancy !== null ? formatPercent(hoje.occupancy) : 'Sem capacidade'}
-            hint={hoje.capacity !== null ? `${formatNumber(hoje.sold)} vendidos` : undefined}
+            hint={
+              !aberto
+                ? hoje.status === 'CLOSED'
+                  ? 'o parque não abre hoje'
+                  : 'dia não configurado no calendário'
+                : hoje.capacity !== null
+                  ? `${formatNumber(hoje.sold)} de ${formatNumber(hoje.capacity)} vendidos · ${formatPercent(hoje.occupancy ?? 0)} ocupado`
+                  : 'sem capacidade definida'
+            }
             icon={Gauge}
-            tone="sun"
-          />
-          <KpiCard
-            label="Comparecimento hoje"
-            value={hoje.attendance !== null ? formatPercent(hoje.attendance) : 'Sem ingressos'}
-            hint="check-ins ÷ ingressos do dia"
-            icon={UserCheck}
-            tone="pool"
           />
         </KpiGrid>
       </section>
@@ -603,17 +575,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               ) : null}
             </CardContent>
           </Card>
-          {can(auth, 'ticket_types.view') ? (
-            <Card>
-              <CardHeader
-                title="Página de vendas"
-                description="Link que o cliente usa para escolher a data e comprar. Divulgue nas redes, no WhatsApp e no site."
-              />
-              <CardContent>
-                <SalesLink url={`${env().APP_URL}/comprar`} />
-              </CardContent>
-            </Card>
-          ) : null}
         </div>
       </div>
 
