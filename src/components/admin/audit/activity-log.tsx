@@ -14,14 +14,14 @@ import { listAuditLogs } from '@/server/audit';
 import type { AuthContext } from '@/server/auth/context';
 import type { SearchParamsRecord } from '@/server/filters';
 
-const BASE = '/admin/usuarios?aba=atividade';
+const BASE = '/admin/atividades';
 
 function texto(valor: string | string[] | undefined, maximo = 120): string | undefined {
   return typeof valor === 'string' && valor.trim() ? valor.trim().slice(0, maximo) : undefined;
 }
 
-/** Aba Atividade: registro de tudo o que foi feito no sistema (auditoria). */
-export async function AbaAtividade({
+/** Registro de tudo o que foi feito no sistema (auditoria). */
+export async function ActivityLog({
   auth,
   parametros,
 }: {
@@ -58,14 +58,13 @@ export async function AbaAtividade({
     const busca = new URLSearchParams(filtros);
     for (const [chave, valor] of Object.entries(extra)) busca.set(chave, valor);
     const consulta = busca.toString();
-    return consulta ? `${BASE}&${consulta}` : BASE;
+    return consulta ? `${BASE}?${consulta}` : BASE;
   };
 
   return (
     <>
       <Card className="p-4 sm:p-5">
         <form className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_170px_170px_auto] sm:items-end">
-          <input type="hidden" name="aba" value="atividade" />
           <Field id="filtro-grupo" label="Tipo de ação">
             <Select id="filtro-grupo" name="grupo" defaultValue={grupo ?? ''}>
               <option value="">Todas as ações</option>
@@ -134,7 +133,7 @@ export async function AbaAtividade({
                     </span>
                     <span className="min-w-0 text-[13px] sm:text-right">
                       {item.actor ? (
-                        <span className="block truncate font-semibold text-ink-800">{item.actor.name}</span>
+                        <span className="block truncate font-semibold text-ink-800">Painel</span>
                       ) : (
                         <Badge tone="neutral">{auditActorFallback(item.action, item.actorType)}</Badge>
                       )}

@@ -18,7 +18,7 @@ export type AdminIcon =
   | 'finance'
   | 'reports'
   | 'marketing'
-  | 'team'
+  | 'audit'
   | 'settings';
 
 export interface AdminNavItem {
@@ -86,14 +86,9 @@ export const ADMIN_NAV: readonly AdminNavSection[] = [
     ],
   },
   {
-    label: 'Gestão',
-    items: [
-      { href: '/admin/usuarios', label: 'Usuários', icon: 'team', permission: ['users.view', 'audit.view'] },
-    ],
-  },
-  {
     label: 'Sistema',
     items: [
+      { href: '/admin/atividades', label: 'Atividades', icon: 'audit', permission: 'audit.view' },
       { href: '/admin/configuracoes', label: 'Configurações', icon: 'settings', permission: 'settings.view' },
     ],
   },

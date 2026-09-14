@@ -90,7 +90,7 @@ function detalheDaRecusa(
         dbDia(ingresso.checkedInAt, fuso) === hoje
           ? `hoje às ${formatTimeBR(ingresso.checkedInAt, fuso)}`
           : `em ${formatDateBR(dbDia(ingresso.checkedInAt, fuso))} às ${formatTimeBR(ingresso.checkedInAt, fuso)}`;
-      return `Entrada registrada ${quando}${ingresso.checkedInByName ? ` por ${ingresso.checkedInByName}` : ''}.`;
+      return `Entrada registrada ${quando}.`;
     }
     case 'WRONG_DATE':
       return `Este ingresso é para ${formatDateBR(ingresso.visitDate)}.`;

@@ -77,7 +77,7 @@ export const REPORTS: Readonly<Record<ReportKey, ReportInfo>> = {
   },
   checkins: {
     title: 'Check-ins',
-    description: 'Todas as leituras da portaria, liberadas e negadas, com motivo, operador e aparelho.',
+    description: 'Todas as leituras da portaria, liberadas e negadas, com motivo e aparelho.',
     basis: 'Data da leitura',
     permissions: ['checkin.monitor', 'tickets.view'],
   },

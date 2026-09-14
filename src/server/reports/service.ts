@@ -145,7 +145,6 @@ async function relatorioDeVendas({ db, parkId, inicio, fim }: Contexto): Promise
       utmCampaign: true,
       referrer: true,
       coupon: { select: { code: true } },
-      soldBy: { select: { name: true } },
       payments: { select: { method: true, status: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
       _count: { select: { tickets: true } },
     },
@@ -172,7 +171,6 @@ async function relatorioDeVendas({ db, parkId, inicio, fim }: Contexto): Promise
       { key: 'cupom', label: 'Cupom', type: 'text' },
       { key: 'origem', label: 'Origem', type: 'text' },
       { key: 'campanha', label: 'Campanha', type: 'text' },
-      { key: 'vendedor', label: 'Vendido por', type: 'text' },
     ],
     rows: itens.map((pedido) => {
       const pagamento =
@@ -195,7 +193,6 @@ async function relatorioDeVendas({ db, parkId, inicio, fim }: Contexto): Promise
         cupom: pedido.coupon?.code ?? null,
         origem: origemDoPedido(pedido, dominio),
         campanha: pedido.utmCampaign,
-        vendedor: pedido.soldBy?.name ?? null,
       };
     }),
     totals: {
@@ -303,7 +300,6 @@ async function relatorioDeIngressos({ db, parkId, periodo, hoje }: Contexto): Pr
       checkedInAt: true,
       ticketType: { select: { name: true } },
       order: { select: { code: true, buyerName: true, channel: true } },
-      checkedInBy: { select: { name: true } },
     },
   });
   const { itens, truncated } = limitar(ingressos);
@@ -325,7 +321,6 @@ async function relatorioDeIngressos({ db, parkId, periodo, hoje }: Contexto): Pr
       { key: 'valor', label: 'Valor', type: 'money' },
       { key: 'cortesia', label: 'Cortesia', type: 'text' },
       { key: 'entrada', label: 'Entrada', type: 'datetime' },
-      { key: 'liberadoPor', label: 'Liberado por', type: 'text' },
     ],
     rows: itens.map((ingresso) => {
       const visita = dbToDateOnly(ingresso.visitDate);
@@ -343,7 +338,6 @@ async function relatorioDeIngressos({ db, parkId, periodo, hoje }: Contexto): Pr
         valor: ingresso.priceCents,
         cortesia: ingresso.isCourtesy ? 'Sim' : null,
         entrada: ingresso.checkedInAt,
-        liberadoPor: ingresso.checkedInBy?.name ?? null,
       };
     }),
     totals: {
@@ -446,7 +440,6 @@ async function relatorioDeCheckins({ db, parkId, inicio, fim }: Contexto): Promi
       method: true,
       codeTried: true,
       device: true,
-      user: { select: { name: true } },
       ticket: {
         select: {
           code: true,
@@ -472,7 +465,6 @@ async function relatorioDeCheckins({ db, parkId, inicio, fim }: Contexto): Promi
       { key: 'tipo', label: 'Tipo', type: 'text' },
       { key: 'visita', label: 'Data do ingresso', type: 'date' },
       { key: 'pedido', label: 'Pedido', type: 'text' },
-      { key: 'operador', label: 'Operador', type: 'text' },
       { key: 'aparelho', label: 'Aparelho', type: 'text' },
     ],
     rows: itens.map((tentativa) => ({
@@ -485,7 +477,6 @@ async function relatorioDeCheckins({ db, parkId, inicio, fim }: Contexto): Promi
       tipo: tentativa.ticket?.ticketType.name ?? null,
       visita: tentativa.ticket ? dbToDateOnly(tentativa.ticket.visitDate) : null,
       pedido: tentativa.ticket?.order.code ?? null,
-      operador: tentativa.user?.name ?? null,
       aparelho: tentativa.device,
     })),
     totals: {

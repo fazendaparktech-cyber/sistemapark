@@ -221,9 +221,6 @@ export default async function IngressosPage({ searchParams }: { searchParams: Pr
                       {ingresso.checkedInAt ? (
                         <>
                           <p className="text-ink-800">{formatDateTimeBR(ingresso.checkedInAt, fuso)}</p>
-                          {ingresso.checkedInByName ? (
-                            <p className="text-xs text-ink-500">por {ingresso.checkedInByName}</p>
-                          ) : null}
                         </>
                       ) : (
                         <span className="text-ink-400">Não entrou</span>

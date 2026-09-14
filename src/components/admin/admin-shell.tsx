@@ -3,6 +3,7 @@
 import {
   CalendarDays,
   ChevronDown,
+  ClipboardList,
   FileSpreadsheet,
   KeyRound,
   LayoutDashboard,
@@ -17,7 +18,6 @@ import {
   Tags,
   Ticket,
   TicketPercent,
-  Users,
   UsersRound,
   Wallet,
   X,
@@ -46,7 +46,7 @@ const ICONES: Record<AdminIcon, LucideIcon> = {
   finance: Wallet,
   reports: FileSpreadsheet,
   marketing: Megaphone,
-  team: Users,
+  audit: ClipboardList,
   settings: Settings,
 };
 

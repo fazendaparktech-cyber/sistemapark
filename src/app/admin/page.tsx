@@ -37,7 +37,6 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Table, TableContainer, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { formatDateBR, formatDateTimeBR, todayIn, weekdayOf } from '@/lib/dates';
 import { formatNumber, formatPercent, plural } from '@/lib/format';
-import { greetingFor } from '@/lib/greeting';
 import { formatBRL } from '@/lib/money';
 import { ORDER_CHANNEL_LABELS, PAYMENT_GROUP_LABELS } from '@/lib/orders';
 import { ORIGIN_LABELS } from '@/lib/origins';
@@ -103,8 +102,6 @@ function Ocupacao({ dia }: { dia: UpcomingDay }) {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Parametros> }) {
   const auth = await requirePageAuth();
   const agora = new Date();
-  const primeiroNome = auth.user.name.trim().split(/\s+/)[0] ?? auth.user.name;
-  const saudacao = `${greetingFor(auth.park.timezone, agora)}, ${primeiroNome}`;
 
   if (!can(auth, 'dashboard.view')) {
     // Quem não vê o dashboard (portaria, bilheteria) cai direto na primeira área liberada.
@@ -113,7 +110,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return (
       <PageHeader
         eyebrow={auth.park.name}
-        title={saudacao}
+        title="Dashboard"
         description="Seu acesso ainda não inclui nenhuma área do painel. Fale com o administrador do parque."
       />
     );
@@ -141,7 +138,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <div className="grid gap-6 lg:gap-8">
       <PageHeader
         eyebrow={auth.park.name}
-        title={saudacao}
+        title="Dashboard"
         description="Vendas, faturamento, visitantes e ocupação do parque."
       />
 

@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { SUPER_ADMIN_ROLE } from '@/lib/access';
 import { addDays, dateOnlyToDb, todayIn } from '@/lib/dates';
 
 import { requirePermission, type AuthContext } from '../auth/context';
@@ -25,10 +24,7 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
   const config = env();
   const hoje = todayIn(auth.park.timezone);
 
-  const [superAdmins, diasAbertos, tiposOnline, parque, politicas] = await Promise.all([
-    db.userRole.count({
-      where: { parkId: auth.park.id, role: { key: SUPER_ADMIN_ROLE }, user: { status: 'ACTIVE' } },
-    }),
+  const [diasAbertos, tiposOnline, parque, politicas] = await Promise.all([
     db.parkDay.count({
       where: {
         parkId: auth.park.id,
@@ -128,16 +124,6 @@ export async function getReadiness(auth: AuthContext, db: DbClient = prisma): Pr
       detail: https
         ? config.APP_URL
         : 'Rodando em endereço local. Em produção o sistema precisa de domínio com https.',
-    },
-    {
-      key: 'super-admins',
-      ok: superAdmins >= 2,
-      title: 'Dois super admins',
-      detail:
-        superAdmins >= 2
-          ? `${superAdmins} pessoas com acesso total.`
-          : 'Só uma pessoa tem acesso total. Nomeie uma segunda para não correr o risco de ficar sem acesso.',
-      href: superAdmins >= 2 ? undefined : '/admin/usuarios',
     },
   ];
 }

@@ -4,7 +4,6 @@ import type { ReactNode } from 'react';
 
 import { AdminShell } from '@/components/admin/admin-shell';
 import { navFor } from '@/components/admin/nav';
-import { roleDefinition } from '@/lib/access';
 import { requirePageAuth } from '@/server/auth/guards';
 
 export const metadata: Metadata = {
@@ -25,9 +24,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         auth.permissions.has(permissao),
       )}
       user={{
-        name: auth.user.name,
+        name: auth.park.name,
         email: auth.user.email,
-        roleNames: auth.roles.map((papel) => roleDefinition(papel).name),
+        roleNames: ['Conta da empresa'],
       }}
     >
       {children}

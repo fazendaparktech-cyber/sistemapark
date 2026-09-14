@@ -45,9 +45,7 @@ function mensagemSemQr(ingresso: TicketDetail, fuso: string): string {
   switch (ingresso.status) {
     case 'CHECKED_IN':
       return ingresso.checkedInAt
-        ? `Entrada registrada em ${formatDateTimeBR(ingresso.checkedInAt, fuso)}${
-            ingresso.checkedInByName ? ` por ${ingresso.checkedInByName}` : ''
-          }. O QR Code não vale mais.`
+        ? `Entrada registrada em ${formatDateTimeBR(ingresso.checkedInAt, fuso)}. O QR Code não vale mais.`
         : 'Entrada já registrada. O QR Code não vale mais.';
     case 'PENDING_PAYMENT':
       return 'O QR Code aparece quando o pagamento for confirmado.';
@@ -144,11 +142,7 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
                   </span>
                 </Linha>
                 <Linha rotulo="Entrada">
-                  {ingresso.checkedInAt
-                    ? `${formatDateTimeBR(ingresso.checkedInAt, fuso)}${
-                        ingresso.checkedInByName ? ` · ${ingresso.checkedInByName}` : ''
-                      }`
-                    : 'Não registrada'}
+                  {ingresso.checkedInAt ? formatDateTimeBR(ingresso.checkedInAt, fuso) : 'Não registrada'}
                 </Linha>
                 <Linha rotulo="Emitido em">{formatDateTimeBR(ingresso.createdAt, fuso)}</Linha>
               </dl>

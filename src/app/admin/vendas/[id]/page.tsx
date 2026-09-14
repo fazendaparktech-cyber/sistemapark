@@ -111,10 +111,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
           <h1 className="font-mono text-[26px] font-semibold tracking-tight text-ink-900 sm:text-[30px]">
             {pedido.code}
           </h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Compra em {formatDateTimeBR(pedido.createdAt, fuso)}
-            {pedido.soldByName ? ` · vendida por ${pedido.soldByName}` : ''}
-          </p>
+          <p className="mt-1 text-sm text-ink-500">Compra em {formatDateTimeBR(pedido.createdAt, fuso)}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <SaleStatusBadge status={pedido.saleStatus} />
             <ChannelBadge channel={pedido.channel} />
@@ -236,7 +233,6 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
                       {ingresso.checkedInAt ? (
                         <p className="text-xs text-ink-500">
                           Entrou em {formatDateTimeBR(ingresso.checkedInAt, fuso)}
-                          {ingresso.checkedInByName ? ` · liberado por ${ingresso.checkedInByName}` : ''}
                         </p>
                       ) : null}
                     </div>
@@ -454,7 +450,9 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
                         </p>
                         <p className="text-xs text-ink-500">
                           {formatDateTimeBR(registro.at, fuso)} ·{' '}
-                          {registro.actorName ?? auditActorFallback(registro.action, registro.actorType)}
+                          {registro.actorName
+                            ? 'Painel'
+                            : auditActorFallback(registro.action, registro.actorType)}
                         </p>
                         {detalhe ? <p className="mt-0.5 text-[13px] text-ink-600">{detalhe}</p> : null}
                       </li>
