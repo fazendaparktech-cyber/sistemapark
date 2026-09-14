@@ -70,11 +70,11 @@ function Navegacao({ nav, onNavigate }: { nav: AdminNavSection[]; onNavigate?: (
     href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <nav aria-label="Menu do painel" className="grid gap-7">
+    <nav aria-label="Menu do painel" className="grid gap-6">
       {nav.map((secao) => (
         <div key={secao.label || 'inicio'}>
           {secao.label ? (
-            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-400">
               {secao.label}
             </p>
           ) : null}
@@ -89,16 +89,16 @@ function Navegacao({ nav, onNavigate }: { nav: AdminNavSection[]; onNavigate?: (
                     onClick={onNavigate}
                     aria-current={atual ? 'page' : undefined}
                     className={cn(
-                      'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-medium transition-colors',
+                      'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors',
                       atual
-                        ? 'bg-pool-50 text-pool-800'
+                        ? 'bg-pool-50 font-semibold text-pool-800'
                         : 'text-ink-600 hover:bg-ink-100/80 hover:text-ink-900',
                     )}
                   >
                     {atual ? (
                       <span
                         aria-hidden
-                        className="absolute inset-y-2 -left-4 w-1 rounded-r-full bg-pool-600"
+                        className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-pool-600"
                       />
                     ) : null}
                     <Icone
@@ -122,8 +122,8 @@ function Navegacao({ nav, onNavigate }: { nav: AdminNavSection[]; onNavigate?: (
 
 function CartaoDoParque({ nome }: { nome: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-ink-50 px-3 py-2.5 ring-1 ring-ink-200/70">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-grape-600 ring-1 ring-ink-200">
+    <div className="mt-3 flex items-center gap-3 border-t border-ink-100 px-3 pt-4">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-grape-50 text-grape-600">
         <MapPin className="size-4" aria-hidden />
       </span>
       <div className="min-w-0">
@@ -211,15 +211,17 @@ export function AdminShell({
   const [gavetaAberta, setGavetaAberta] = useState(false);
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-ink-200/70 bg-white/80 px-4 py-6 backdrop-blur lg:flex">
-        <Link href="/admin" className="w-fit px-3">
-          <Logo className="h-9" />
-        </Link>
-        <div className="mt-9 flex-1 overflow-y-auto pl-1">
-          <Navegacao nav={nav} />
+    <div className="min-h-dvh lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-dvh py-4 pl-4 lg:block">
+        <div className="flex h-full flex-col rounded-2xl bg-white px-3 py-5 shadow-[0_12px_40px_-16px_rgb(15_23_42/0.22)] ring-1 ring-ink-200/60">
+          <Link href="/admin" className="w-fit px-3">
+            <Logo className="h-8" />
+          </Link>
+          <div className="-mx-1 mt-7 flex-1 overflow-y-auto px-1">
+            <Navegacao nav={nav} />
+          </div>
+          <CartaoDoParque nome={parkName} />
         </div>
-        <CartaoDoParque nome={parkName} />
       </aside>
 
       <div className="flex min-w-0 flex-col">
