@@ -11,7 +11,9 @@ function celula(valor: Celula): string {
   if (valor === null || valor === undefined) return '';
   if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
   let texto = String(valor);
-  if (typeof valor === 'string' && /^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`;
+  if (typeof valor === 'string' && /^[=+\-@\t\r]/.test(texto) && !/^-\d+(,\d+)?$/.test(texto)) {
+    texto = `'${texto}`;
+  }
   if (/[";\r\n]/.test(texto)) texto = `"${texto.replace(/"/g, '""')}"`;
   return texto;
 }

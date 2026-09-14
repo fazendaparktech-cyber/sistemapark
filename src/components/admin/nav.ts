@@ -15,6 +15,8 @@ export type AdminIcon =
   | 'coupons'
   | 'calendar'
   | 'gate'
+  | 'finance'
+  | 'reports'
   | 'team'
   | 'permissions'
   | 'audit'
@@ -64,6 +66,13 @@ export const ADMIN_NAV: readonly AdminNavSection[] = [
         icon: 'gate',
         permission: ['checkin.scan', 'checkin.manual', 'checkin.monitor'],
       },
+    ],
+  },
+  {
+    label: 'Financeiro',
+    items: [
+      { href: '/admin/financeiro', label: 'Financeiro', icon: 'finance', permission: 'finance.view' },
+      { href: '/admin/relatorios', label: 'Relatórios', icon: 'reports', permission: 'reports.view' },
     ],
   },
   {
