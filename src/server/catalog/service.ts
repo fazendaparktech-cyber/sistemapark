@@ -3,10 +3,12 @@ import 'server-only';
 import type { Prisma, PrismaClient, TicketPrice, TicketType } from '@/generated/prisma/client';
 import {
   priceRuleInputSchema,
+  simplePricingSchema,
   ticketTypeInputSchema,
   type HolderDataKey,
   type PriceRuleInput,
   type SalesChannelKey,
+  type SimplePricingInput,
   type TicketCategoryKey,
   type TicketTypeInput,
 } from '@/lib/catalog';
@@ -196,6 +198,8 @@ export interface AdminPriceRule {
   lotSold: number | null;
   priority: number;
   isActive: boolean;
+  /** CUSTOM: regra avançada; WEEKEND, HOLIDAY e PROMO: preços simples; SPECIAL_DATE: preço de uma data no calendário. */
+  kind: TicketPrice['kind'];
 }
 
 export interface AdminTicketType {
@@ -224,6 +228,12 @@ export interface AdminTicketType {
   sortOrder: number;
   isActive: boolean;
   soldUnits: number;
+  /** Preços de fim de semana, feriado e promoção; vazio usa o preço base (dias de semana). */
+  simplePricing: {
+    weekendPriceCents: number | null;
+    holidayPriceCents: number | null;
+    promo: { priceCents: number; from: DateOnly | null; until: DateOnly | null; active: boolean } | null;
+  };
   prices: AdminPriceRule[];
 }
 
@@ -249,6 +259,31 @@ function paraRegraDoPainel(
     lotSold: preco.lotQuantity === null ? null : (vendidos.get(preco.id) ?? 0),
     priority: preco.priority,
     isActive: preco.isActive,
+    kind: preco.kind,
+  };
+}
+
+function precosSimples(tipo: TipoComPrecos, timeZone: string, agora: Date): AdminTicketType['simplePricing'] {
+  const regra = (kind: TicketPrice['kind']) =>
+    tipo.prices.find((preco) => preco.kind === kind && preco.isActive) ?? null;
+  const fimDeSemana = regra('WEEKEND');
+  const feriado = regra('HOLIDAY');
+  const promocao = regra('PROMO');
+  return {
+    weekendPriceCents: fimDeSemana?.priceCents ?? null,
+    holidayPriceCents: feriado?.priceCents ?? null,
+    promo: promocao
+      ? {
+          priceCents: promocao.priceCents,
+          from: promocao.saleStartsAt ? dateOnlyOf(promocao.saleStartsAt, timeZone) : null,
+          until: promocao.saleEndsAt
+            ? dateOnlyOf(new Date(promocao.saleEndsAt.getTime() - 1), timeZone)
+            : null,
+          active:
+            (!promocao.saleStartsAt || agora >= promocao.saleStartsAt) &&
+            (!promocao.saleEndsAt || agora < promocao.saleEndsAt),
+        }
+      : null,
   };
 }
 
@@ -314,6 +349,7 @@ async function montarTiposDoPainel(
     sortOrder: tipo.sortOrder,
     isActive: tipo.isActive,
     soldUnits: unidades.get(tipo.id) ?? 0,
+    simplePricing: precosSimples(tipo, auth.park.timezone, agora),
     prices: [...tipo.prices]
       .sort((a, b) => b.priority - a.priority || a.createdAt.getTime() - b.createdAt.getTime())
       .map((preco) => paraRegraDoPainel(preco, auth.park.timezone, vendidosPorLote)),
@@ -517,6 +553,128 @@ export async function moveTicketType(
       meta,
     });
   });
+}
+
+// ─── Preços simples ─────────────────────────────────────────────────────────
+
+const PRECOS_SIMPLES = {
+  WEEKEND: { name: 'Fim de semana', dayKinds: ['WEEKEND'], priority: 10 },
+  HOLIDAY: { name: 'Feriado', dayKinds: ['HOLIDAY'], priority: 20 },
+  PROMO: { name: 'Promoção', dayKinds: [], priority: 30 },
+} as const satisfies Record<string, { name: string; dayKinds: readonly DayKind[]; priority: number }>;
+
+type TipoDePrecoSimples = keyof typeof PRECOS_SIMPLES;
+
+/**
+ * Salva os preços do dia a dia: preço base (dias de semana), fim de semana,
+ * feriado e valor promocional por período de vendas. Cada um vira uma regra
+ * própria; valor vazio remove a regra. Regras avançadas não são tocadas.
+ */
+export async function saveSimplePricing(
+  auth: AuthContext,
+  ticketTypeId: string,
+  input: SimplePricingInput,
+  meta: RequestMeta,
+  db: PrismaClient = prisma,
+): Promise<AdminTicketType> {
+  requirePermission(auth, 'ticket_types.manage');
+  const parsed = simplePricingSchema.safeParse(input);
+  if (!parsed.success) throw fromZodError(parsed.error);
+  const valores = parsed.data;
+  const fuso = auth.park.timezone;
+
+  await db.$transaction(async (tx) => {
+    const tipo = await tx.ticketType.findFirst({
+      where: { id: ticketTypeId, parkId: auth.park.id },
+      include: { prices: { where: { kind: { in: ['WEEKEND', 'HOLIDAY', 'PROMO'] } } } },
+    });
+    if (!tipo) throw Errors.notFound('Tipo de ingresso não encontrado.');
+    const antes = { basePriceCents: tipo.basePriceCents, ...precosSimples(tipo, fuso, new Date()) };
+
+    await tx.ticketType.update({
+      where: { id: ticketTypeId },
+      data: { basePriceCents: valores.basePriceCents },
+    });
+
+    const aplicar = async (
+      kind: TipoDePrecoSimples,
+      dados: {
+        priceCents: number;
+        compareAtCents: number | null;
+        saleStartsAt: Date | null;
+        saleEndsAt: Date | null;
+      } | null,
+    ) => {
+      const [atual, ...sobras] = tipo.prices.filter((preco) => preco.kind === kind);
+      const remover = dados ? sobras : [atual, ...sobras].filter((preco) => preco !== undefined);
+      if (remover.length > 0) {
+        await tx.ticketPrice.deleteMany({ where: { id: { in: remover.map((preco) => preco.id) } } });
+      }
+      if (!dados) return;
+      const fixo = {
+        name: PRECOS_SIMPLES[kind].name,
+        dayKinds: [...PRECOS_SIMPLES[kind].dayKinds],
+        priority: PRECOS_SIMPLES[kind].priority,
+        visitFrom: null,
+        visitUntil: null,
+        lotQuantity: null,
+        isActive: true,
+      };
+      if (atual) {
+        await tx.ticketPrice.update({ where: { id: atual.id }, data: { ...fixo, ...dados } });
+      } else {
+        await tx.ticketPrice.create({ data: { ticketTypeId, kind, ...fixo, ...dados } });
+      }
+    };
+
+    await aplicar(
+      'WEEKEND',
+      valores.weekendPriceCents === null
+        ? null
+        : {
+            priceCents: valores.weekendPriceCents,
+            compareAtCents: null,
+            saleStartsAt: null,
+            saleEndsAt: null,
+          },
+    );
+    await aplicar(
+      'HOLIDAY',
+      valores.holidayPriceCents === null
+        ? null
+        : {
+            priceCents: valores.holidayPriceCents,
+            compareAtCents: null,
+            saleStartsAt: null,
+            saleEndsAt: null,
+          },
+    );
+    await aplicar(
+      'PROMO',
+      valores.promo
+        ? {
+            priceCents: valores.promo.priceCents,
+            compareAtCents: valores.basePriceCents,
+            saleStartsAt: valores.promo.from ? zonedTimeToInstant(valores.promo.from, '00:00', fuso) : null,
+            saleEndsAt: valores.promo.until
+              ? zonedTimeToInstant(addDays(valores.promo.until, 1), '00:00', fuso)
+              : null,
+          }
+        : null,
+    );
+
+    await recordAudit(tx, {
+      action: 'prices.simple_updated',
+      parkId: auth.park.id,
+      actorUserId: auth.user.id,
+      entityType: 'ticket_type',
+      entityId: ticketTypeId,
+      before: antes,
+      after: valores,
+      meta,
+    });
+  });
+  return getTicketTypeAdmin(auth, ticketTypeId, db);
 }
 
 // ─── Regras de preço ────────────────────────────────────────────────────────

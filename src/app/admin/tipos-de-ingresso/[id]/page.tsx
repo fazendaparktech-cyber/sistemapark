@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { NoPermission } from '@/components/admin/no-permission';
 import { SalesLink } from '@/components/admin/sales-link';
 import { DeletePriceRuleButton, PriceRuleDialog } from '@/components/admin/tickets/price-rule-dialog';
+import { SimplePricingForm } from '@/components/admin/tickets/simple-pricing-form';
 import { TicketTypeFormDialog } from '@/components/admin/tickets/ticket-type-form-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -78,6 +79,10 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
   const podeEditar = can(auth, 'ticket_types.manage');
   const podePrecificar = can(auth, 'ticket_types.manage');
   const linkDoIngresso = `${env().APP_URL}/comprar?ingresso=${tipo.slug}`;
+  const regrasAvancadas = tipo.prices.filter((regra) => regra.kind === 'CUSTOM');
+  const precosPorData = tipo.prices
+    .filter((regra) => regra.kind === 'SPECIAL_DATE' && regra.visitFrom)
+    .sort((a, b) => (a.visitFrom ?? '').localeCompare(b.visitFrom ?? ''));
 
   return (
     <div className="grid gap-6">
@@ -135,21 +140,40 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
         <div className="grid gap-6">
           <Card>
-            <CardHeader title="Preço" />
-            <CardContent className="pt-3">
-              <p className="text-xs font-semibold text-ink-500">Para hoje</p>
-              <p className="tabular font-display text-3xl font-semibold text-ink-900">
-                {tipo.todayPrice.priceCents === 0 ? 'Gratuito' : formatBRL(tipo.todayPrice.priceCents)}
-              </p>
+            <CardHeader title="Preços" />
+            <CardContent className="grid gap-4 pt-3">
+              <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl bg-ink-50 px-4 py-3 ring-1 ring-inset ring-ink-200/70">
+                <div>
+                  <p className="text-xs font-semibold text-ink-500">Valendo hoje</p>
+                  <p className="tabular font-display text-2xl font-semibold text-ink-900">
+                    {tipo.todayPrice.priceCents === 0 ? 'Gratuito' : formatBRL(tipo.todayPrice.priceCents)}
+                    {tipo.todayPrice.compareAtCents ? (
+                      <span className="ml-2 text-sm font-normal text-ink-400 line-through">
+                        {formatBRL(tipo.todayPrice.compareAtCents)}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-[13px] text-ink-500">{tipo.todayPrice.label ?? 'Preço normal'}</p>
+                </div>
+                <p className="text-[13px] text-ink-600">{plural(tipo.soldUnits, 'vendido', 'vendidos')}</p>
+              </div>
+              <SimplePricingForm
+                ticketTypeId={tipo.id}
+                canManage={podePrecificar}
+                values={{
+                  basePriceCents: tipo.basePriceCents,
+                  weekendPriceCents: tipo.simplePricing.weekendPriceCents,
+                  holidayPriceCents: tipo.simplePricing.holidayPriceCents,
+                  promo: tipo.simplePricing.promo,
+                }}
+              />
               <p className="text-[13px] text-ink-500">
-                {tipo.todayPrice.label
-                  ? `Regra: ${tipo.todayPrice.label}`
-                  : 'Preço base, nenhuma regra vale hoje'}
+                Preço para uma data específica (evento, data especial):{' '}
+                <Link href="/admin/calendario" className="font-semibold text-pool-700 hover:text-pool-800">
+                  defina no calendário
+                </Link>
+                .
               </p>
-              <dl className="mt-3 divide-y divide-ink-100 border-t border-ink-100">
-                <Linha rotulo="Preço base" valor={formatBRL(tipo.basePriceCents)} />
-                <Linha rotulo="Vendidos" valor={formatNumber(tipo.soldUnits)} />
-              </dl>
             </CardContent>
           </Card>
 
@@ -219,12 +243,12 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="regras-de-preco" className="font-display text-[17px] font-semibold text-ink-900">
-                Regras de preço
+                Regras avançadas
               </h2>
               <p className="text-[13px] text-ink-500">
-                {tipo.prices.length === 0
-                  ? 'Sem regras: o preço base vale para todas as datas.'
-                  : plural(tipo.prices.length, 'regra cadastrada', 'regras cadastradas')}
+                {regrasAvancadas.length === 0
+                  ? 'Opcional: lotes, preço por período de visita ou por tipo de dia.'
+                  : plural(regrasAvancadas.length, 'regra cadastrada', 'regras cadastradas')}
               </p>
             </div>
             {podePrecificar ? <PriceRuleDialog ticketTypeId={tipo.id} /> : null}
@@ -233,13 +257,42 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
           <div className="flex gap-3 rounded-xl bg-pool-50 px-4 py-3 text-[13px] leading-5 text-pool-900 ring-1 ring-inset ring-pool-200">
             <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
             <p>
-              Entre as regras ativas que valem para a data e o momento da compra, vence a de maior prioridade.
-              Empatando, vence a do tipo marcado no calendário (feriado, evento), depois a do dia da semana,
-              depois a geral. Lote esgotado deixa de valer sozinho.
+              Para a maioria dos casos, os preços ao lado bastam. Use regras avançadas para lotes (ex.:
+              primeiros 200 ingressos) ou preços por período. Entre as regras que valem, vence a de maior
+              prioridade; o preço especial de uma data no calendário vence todas.
             </p>
           </div>
 
-          {tipo.prices.length > 0 ? (
+          {precosPorData.length > 0 ? (
+            <Card>
+              <CardHeader
+                title="Preços por data"
+                description="Definidos no calendário para datas específicas."
+                action={
+                  <Link
+                    href="/admin/calendario"
+                    className="text-sm font-semibold text-pool-700 hover:text-pool-800"
+                  >
+                    Abrir calendário
+                  </Link>
+                }
+              />
+              <CardContent className="pt-2">
+                <ul className="divide-y divide-ink-100">
+                  {precosPorData.map((regra) => (
+                    <li key={regra.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <span className="text-ink-700">{formatDateBR(regra.visitFrom ?? '')}</span>
+                      <span className="tabular font-semibold text-ink-900">
+                        {formatBRL(regra.priceCents)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {regrasAvancadas.length > 0 ? (
             <TableContainer>
               <Table>
                 <THead>
@@ -257,7 +310,7 @@ export default async function IngressoPage({ params }: { params: Promise<{ id: s
                   </tr>
                 </THead>
                 <TBody>
-                  {tipo.prices.map((regra) => (
+                  {regrasAvancadas.map((regra) => (
                     <TR key={regra.id} className={regra.isActive ? undefined : 'bg-ink-50/60 text-ink-500'}>
                       <TD>
                         <p className="font-medium text-ink-900">{regra.name}</p>

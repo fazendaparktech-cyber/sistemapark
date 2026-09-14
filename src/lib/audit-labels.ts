@@ -39,6 +39,7 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'ticket_types.created': 'Criou tipo de ingresso',
   'ticket_types.updated': 'Alterou tipo de ingresso',
   'ticket_types.reordered': 'Mudou a ordem dos ingressos',
+  'prices.simple_updated': 'Alterou os preços de semana, fim de semana, feriado ou promoção',
   'prices.rule_created': 'Criou regra de preço',
   'prices.rule_updated': 'Alterou regra de preço',
   'prices.rule_deleted': 'Excluiu regra de preço',

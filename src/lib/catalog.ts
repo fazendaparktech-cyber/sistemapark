@@ -195,3 +195,41 @@ export const priceRuleInputSchema = z
   });
 
 export type PriceRuleInput = z.input<typeof priceRuleInputSchema>;
+
+/**
+ * Preços do dia a dia de um tipo de ingresso: preço normal (dias de semana),
+ * fim de semana, feriado e valor promocional por um período de vendas. Vazio
+ * usa o preço normal. Preço de uma data específica fica no calendário.
+ */
+export const simplePricingSchema = z
+  .strictObject({
+    basePriceCents: valorEmCentavos('Informe o preço dos dias de semana'),
+    weekendPriceCents: valorEmCentavos('Preço inválido').nullable(),
+    holidayPriceCents: valorEmCentavos('Preço inválido').nullable(),
+    promo: z
+      .strictObject({
+        priceCents: valorEmCentavos('Informe o valor promocional'),
+        from: optionalDateOnlySchema,
+        until: optionalDateOnlySchema,
+      })
+      .nullable(),
+  })
+  .superRefine((valores, ctx) => {
+    if (!valores.promo) return;
+    if (valores.promo.priceCents >= valores.basePriceCents) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['promo', 'priceCents'],
+        message: 'O valor promocional precisa ser menor que o preço normal',
+      });
+    }
+    if (valores.promo.from && valores.promo.until && valores.promo.from > valores.promo.until) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['promo', 'until'],
+        message: 'O fim precisa ser igual ou depois do início',
+      });
+    }
+  });
+
+export type SimplePricingInput = z.input<typeof simplePricingSchema>;

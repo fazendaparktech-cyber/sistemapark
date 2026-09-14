@@ -29,7 +29,19 @@ function faixaEtaria(tipo: Pick<AdminTicketType, 'minAge' | 'maxAge'>): string {
   return 'Qualquer idade';
 }
 
-export default async function IngressosPage() {
+function resumoDosPrecos(tipo: AdminTicketType): string {
+  const partes = [`Semana ${formatBRL(tipo.basePriceCents)}`];
+  if (tipo.simplePricing.weekendPriceCents !== null) {
+    partes.push(`fim de semana ${formatBRL(tipo.simplePricing.weekendPriceCents)}`);
+  }
+  if (tipo.simplePricing.holidayPriceCents !== null) {
+    partes.push(`feriado ${formatBRL(tipo.simplePricing.holidayPriceCents)}`);
+  }
+  if (tipo.simplePricing.promo) partes.push(`promoção ${formatBRL(tipo.simplePricing.promo.priceCents)}`);
+  return partes.join(' · ');
+}
+
+export default async function TiposDeIngressoPage() {
   const auth = await requirePageAuth();
   if (!can(auth, 'ticket_types.view')) return <NoPermission />;
 
@@ -136,10 +148,7 @@ export default async function IngressosPage() {
                 </div>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-4">
                   <p className="text-[13px] text-ink-600">
-                    {plural(tipo.soldUnits, 'vendido', 'vendidos')} ·{' '}
-                    {tipo.prices.length === 0
-                      ? 'sem regras de preço'
-                      : plural(tipo.prices.length, 'regra de preço', 'regras de preço')}
+                    {plural(tipo.soldUnits, 'vendido', 'vendidos')} · {resumoDosPrecos(tipo)}
                   </p>
                   <div className="flex items-center gap-2">
                     {podeOrdenar && tipos.length > 1 ? (
