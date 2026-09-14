@@ -1,12 +1,15 @@
 import { CircleCheck, CircleX, Clock, MapPin, MessageCircle, TicketCheck } from 'lucide-react';
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import { PaymentPanel, PrintButton } from '@/components/site/payment-panel';
+import { PurchaseConversion } from '@/components/site/purchase-conversion';
 import { buttonClasses } from '@/components/ui/button';
 import { cn } from '@/components/ui/cn';
 import { formatDateTimeBR } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
+import { ORDER_ACCESS_COOKIE } from '@/lib/order-access';
 import { TICKET_STATUS_LABELS } from '@/lib/orders';
 import type { SearchParamsRecord } from '@/server/filters';
 import { getPublicOrder } from '@/server/orders/public';
@@ -30,7 +33,11 @@ export default async function PedidoPublicoPage({
   searchParams: Promise<SearchParamsRecord>;
 }) {
   const [{ code }, parametros, parque] = await Promise.all([params, searchParams, getPublicPark()]);
-  const token = typeof parametros.t === 'string' ? parametros.t : null;
+  // O link do e-mail traz o token em ?t=; depois do primeiro acesso ele vem do cookie do pedido.
+  const token =
+    typeof parametros.t === 'string'
+      ? parametros.t
+      : ((await cookies()).get(ORDER_ACCESS_COOKIE)?.value ?? null);
   const pedido = await getPublicOrder(parque.id, decodeURIComponent(code), token);
 
   if (!pedido) {
@@ -108,6 +115,9 @@ export default async function PedidoPublicoPage({
           </div>
           {pedido.status === 'CONFIRMED' ? <PrintButton /> : null}
         </header>
+        {pedido.status === 'CONFIRMED' ? (
+          <PurchaseConversion code={pedido.code} valueCents={pedido.totalCents} quantity={validos.length} />
+        ) : null}
 
         {pedido.status === 'PENDING_PAYMENT' ? (
           <section

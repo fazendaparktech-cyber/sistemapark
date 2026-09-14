@@ -22,6 +22,7 @@ import { prisma, type DbClient } from '../db';
 import { onlinePaymentsAvailable } from '../env';
 import { AppError, fromZodError } from '../errors';
 import { logger } from '../logger';
+import { recordOrderTrackingEvent } from '../marketing/service';
 import { sendOrderConfirmedEmail, sendOrderReceivedEmail } from '../orders/emails';
 import type { PublicPark } from '../parks/public';
 import { ensurePixPayment } from '../payments/service';
@@ -380,6 +381,9 @@ export async function placeOnlineOrder(
             userAgent: input.meta.userAgent,
           },
         });
+
+        await recordOrderTrackingEvent(tx, pedido, 'PAYMENT_STARTED', dados.visitorId ?? null);
+        if (gratis) await recordOrderTrackingEvent(tx, pedido, 'PURCHASE');
 
         const usados = new Set<string>();
         let totalDeIngressos = 0;

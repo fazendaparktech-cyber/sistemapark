@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage } from '@/lib/api-client';
 import { addDays, weekdayOf } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
+import { sendFunnelEvent, trackPixel, whenPixelsReady } from '@/lib/tracking-client';
 import { formatDateLong, formatMonthYear, WEEKDAY_SHORT_LABELS } from '@/lib/weekdays';
 import type { PublicCalendarDay, PublicDateOffer, PublicTicketOffer } from '@/server/sales/availability';
 
@@ -15,8 +16,6 @@ import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Skeleton } from '../ui/feedback';
 import { QuantityStepper } from './quantity-stepper';
-
-export const ATTRIBUTION_KEY = 'cp-origem';
 
 function deslocarMes(mes: string, delta: number): string {
   const [ano = 2026, numero = 1] = mes.split('-').map(Number);
@@ -35,27 +34,6 @@ function capitalizar(texto: string): string {
 function limiteDoTipo(tipo: PublicTicketOffer, oferta: PublicDateOffer): number {
   const porPedido = Math.floor(oferta.maxTicketsPerOrder / tipo.peoplePerTicket);
   return Math.max(0, Math.min(tipo.maxPerOrder ?? porPedido, tipo.remainingUnits ?? porPedido, porPedido));
-}
-
-/** Guarda de onde a pessoa veio (campanha), para o pedido registrar a origem. */
-function lembrarOrigem() {
-  try {
-    if (sessionStorage.getItem(ATTRIBUTION_KEY)) return;
-    const url = new URL(window.location.href);
-    const referrer =
-      document.referrer && !document.referrer.startsWith(window.location.origin) ? document.referrer : null;
-    const origem = {
-      utmSource: url.searchParams.get('utm_source'),
-      utmMedium: url.searchParams.get('utm_medium'),
-      utmCampaign: url.searchParams.get('utm_campaign'),
-      utmContent: url.searchParams.get('utm_content'),
-      utmTerm: url.searchParams.get('utm_term'),
-      referrer,
-    };
-    if (Object.values(origem).some(Boolean)) sessionStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(origem));
-  } catch {
-    // Navegação privada pode bloquear o armazenamento: a compra segue sem a origem.
-  }
 }
 
 export function PurchaseFlow({
@@ -87,7 +65,10 @@ export function PurchaseFlow({
   const preSelecionou = useRef(false);
   const rolarAoCarregar = useRef(false);
 
-  useEffect(lembrarOrigem, []);
+  useEffect(() => {
+    sendFunnelEvent('VIEW_TICKETS');
+    return whenPixelsReady(() => trackPixel('ViewContent'));
+  }, []);
 
   useEffect(() => {
     const controle = new AbortController();

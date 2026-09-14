@@ -9,7 +9,9 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  type LucideIcon,
   MapPin,
+  Megaphone,
   Menu,
   ReceiptText,
   ScanLine,
@@ -22,7 +24,6 @@ import {
   UsersRound,
   Wallet,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -45,6 +46,7 @@ const ICONES: Record<AdminIcon, LucideIcon> = {
   gate: ScanLine,
   finance: Wallet,
   reports: FileSpreadsheet,
+  marketing: Megaphone,
   team: Users,
   permissions: ShieldCheck,
   audit: ClipboardList,

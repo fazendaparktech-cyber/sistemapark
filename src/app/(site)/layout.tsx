@@ -1,18 +1,24 @@
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 
 import { SiteFooter } from '@/components/site/site-footer';
 import { SiteHeader } from '@/components/site/site-header';
+import { SiteTracking } from '@/components/site/site-tracking';
+import { TrackingScripts } from '@/components/site/tracking-scripts';
 import { todayIn } from '@/lib/dates';
 import { isAppError } from '@/server/errors';
 import { getPublicPark } from '@/server/parks/public';
-import { getParkProfile } from '@/server/settings/service';
+import { getMarketingSettings, getParkProfile } from '@/server/settings/service';
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
   const parque = await getPublicPark().catch((erro: unknown) => {
     if (isAppError(erro)) return null;
     throw erro;
   });
-  const perfil = parque ? await getParkProfile(parque.id) : null;
+  const [perfil, pixels] = parque
+    ? await Promise.all([getParkProfile(parque.id), getMarketingSettings(parque.id)])
+    : [null, null];
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">
@@ -27,6 +33,8 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
         {children}
       </main>
       <SiteFooter profile={perfil} year={todayIn(parque?.timezone).slice(0, 4)} />
+      <SiteTracking />
+      {pixels ? <TrackingScripts settings={pixels} nonce={nonce} /> : null}
     </div>
   );
 }

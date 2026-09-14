@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { Prisma, PrismaClient } from '@/generated/prisma/client';
+import { DEFAULT_MARKETING_SETTINGS, marketingSettingsSchema, type MarketingSettings } from '@/lib/marketing';
 import {
   DEFAULT_POLICIES,
   DEFAULT_SALES_SETTINGS,
@@ -24,7 +25,7 @@ import type { RequestMeta } from '../request';
  * validada pelo mesmo esquema do formulário. Chave ausente usa o padrão.
  */
 
-type ChaveDeConfiguracao = 'sales' | 'policies';
+type ChaveDeConfiguracao = 'sales' | 'policies' | 'marketing';
 
 async function lerChave<T>(
   db: DbClient,
@@ -125,6 +126,33 @@ export async function updatePolicies(
       db,
     );
   }
+  return resultado.data;
+}
+
+// ─── Marketing ──────────────────────────────────────────────────────────────
+
+export function getMarketingSettings(parkId: string, db: DbClient = prisma): Promise<MarketingSettings> {
+  return lerChave(db, parkId, 'marketing', marketingSettingsSchema, DEFAULT_MARKETING_SETTINGS);
+}
+
+export async function updateMarketingSettings(
+  auth: AuthContext,
+  input: unknown,
+  meta: RequestMeta,
+  db: PrismaClient = prisma,
+): Promise<MarketingSettings> {
+  requirePermission(auth, 'marketing.manage');
+  const resultado = marketingSettingsSchema.safeParse(input);
+  if (!resultado.success) throw fromZodError(resultado.error);
+  const antes = await getMarketingSettings(auth.park.id, db);
+  await gravarChave(
+    auth,
+    'marketing',
+    resultado.data,
+    { action: 'marketing.settings_updated', before: antes, after: resultado.data },
+    meta,
+    db,
+  );
   return resultado.data;
 }
 

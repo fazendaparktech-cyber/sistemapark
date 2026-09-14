@@ -3,18 +3,25 @@
 import { Clock, LockKeyhole, TicketPercent, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import { api, ApiError, errorMessage } from '@/lib/api-client';
 import { formatCpfInput } from '@/lib/documents';
 import { formatBRL } from '@/lib/money';
+import {
+  readAttribution,
+  rememberPendingPurchase,
+  sendFunnelEvent,
+  trackPixel,
+  visitorId,
+  whenPixelsReady,
+} from '@/lib/tracking-client';
 import { formatDateLong } from '@/lib/weekdays';
 
 import { Alert } from '../ui/alert';
 import { Button, buttonClasses } from '../ui/button';
 import { Checkbox, Field, fieldIds, Input } from '../ui/field';
 import { formatSeconds, useSecondsLeft } from './countdown';
-import { ATTRIBUTION_KEY } from './purchase-flow';
 
 export interface CheckoutCartItem {
   ticketTypeId: string;
@@ -74,15 +81,6 @@ function capitalizar(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-function lerOrigem(): Record<string, string | null> | null {
-  try {
-    const salvo = sessionStorage.getItem(ATTRIBUTION_KEY);
-    return salvo ? (JSON.parse(salvo) as Record<string, string | null>) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
   const router = useRouter();
   const segundos = useSecondsLeft(cart.expiresAt);
@@ -129,6 +127,13 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
 
   const primeiroAdulto = visitantes.findIndex((visitante) => !visitante.pedeNascimento);
   const total = cupom ? cupom.totalCents : cart.subtotalCents;
+
+  useEffect(() => {
+    sendFunnelEvent('CHECKOUT_STARTED', cart.subtotalCents);
+    return whenPixelsReady(() =>
+      trackPixel('InitiateCheckout', { valueCents: cart.subtotalCents, quantity: cart.ticketsCount }),
+    );
+  }, [cart.subtotalCents, cart.ticketsCount]);
 
   function alterarVisitante(indice: number, campo: 'name' | 'birthDate' | 'cpf', valor: string) {
     setVisitantes((atuais) =>
@@ -189,7 +194,7 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
 
     setEnviando(true);
     try {
-      const resultado = await api<{ url: string }>('/api/public/checkout', {
+      const resultado = await api<{ url: string; code: string; totalCents: number }>('/api/public/checkout', {
         method: 'POST',
         body: {
           buyer: { name: nome, email, phone: celular, cpf },
@@ -203,9 +208,14 @@ export function CheckoutForm({ cart }: { cart: CheckoutCart }) {
           marketingOptIn: novidades,
           acceptTerms: aceite,
           idempotencyKey: chave,
-          attribution: lerOrigem(),
+          attribution: readAttribution(),
+          visitorId: visitorId(),
         },
       });
+      if (resultado.totalCents > 0) {
+        trackPixel('AddPaymentInfo', { valueCents: resultado.totalCents, quantity: cart.ticketsCount });
+      }
+      rememberPendingPurchase(resultado.code);
       router.replace(resultado.url);
     } catch (falha) {
       setEnviando(false);

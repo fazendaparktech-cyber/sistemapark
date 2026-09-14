@@ -17,6 +17,7 @@ export type AdminIcon =
   | 'gate'
   | 'finance'
   | 'reports'
+  | 'marketing'
   | 'team'
   | 'permissions'
   | 'audit'
@@ -73,6 +74,17 @@ export const ADMIN_NAV: readonly AdminNavSection[] = [
     items: [
       { href: '/admin/financeiro', label: 'Financeiro', icon: 'finance', permission: 'finance.view' },
       { href: '/admin/relatorios', label: 'Relatórios', icon: 'reports', permission: 'reports.view' },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      {
+        href: '/admin/marketing',
+        label: 'Marketing / Rastreamento',
+        icon: 'marketing',
+        permission: 'marketing.view',
+      },
     ],
   },
   {

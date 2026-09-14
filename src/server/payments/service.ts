@@ -15,6 +15,7 @@ import { prisma, type DbClient, type Tx } from '../db';
 import { env, isProduction } from '../env';
 import { AppError, Errors } from '../errors';
 import { logger } from '../logger';
+import { recordOrderTrackingEvent } from '../marketing/service';
 import { sendOrderConfirmedEmail } from '../orders/emails';
 import { isUniqueViolation } from '../prisma-errors';
 import type { RequestMeta } from '../request';
@@ -228,6 +229,7 @@ export async function confirmOrderPayment(
     where: { id: orderId },
     data: { status: 'CONFIRMED', financialStatus: 'PAID', confirmedAt: agora },
   });
+  if (pedido.channel === 'ONLINE') await recordOrderTrackingEvent(tx, pedido, 'PURCHASE');
   if (pedido.hold) {
     await tx.capacityHold.update({ where: { id: pedido.hold.id }, data: { status: 'CONVERTED' } });
   }

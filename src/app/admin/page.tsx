@@ -493,9 +493,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               title="Vendas por origem"
               description="Vendas online pagas, pela campanha ou pelo site de onde o cliente veio"
               action={
-                can(auth, 'ticket_types.view') ? (
-                  <Link href="/admin/tipos-de-ingresso" className={LINK}>
-                    Links de campanha
+                can(auth, 'marketing.view') ? (
+                  <Link href="/admin/marketing" className={LINK}>
+                    Funil e campanhas
                   </Link>
                 ) : null
               }

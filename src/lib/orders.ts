@@ -232,6 +232,9 @@ export const attributionSchema = z
 
 export type AttributionInput = z.input<typeof attributionSchema>;
 
+/** Identificador anônimo do navegador, para ligar os passos do funil de compra. */
+export const visitorIdSchema = z.string().regex(/^[A-Za-z0-9-]{16,40}$/, 'Identificador inválido');
+
 export const checkoutInputSchema = z.strictObject({
   buyer: z.strictObject({
     name: personNameSchema,
@@ -255,6 +258,7 @@ export const checkoutInputSchema = z.strictObject({
   /** Gerado no navegador a cada tentativa: repetir o envio não cria outro pedido. */
   idempotencyKey: uuidSchema,
   attribution: attributionSchema.nullish(),
+  visitorId: visitorIdSchema.nullish(),
 });
 
 export type CheckoutInput = z.input<typeof checkoutInputSchema>;
