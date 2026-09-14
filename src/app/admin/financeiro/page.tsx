@@ -12,6 +12,8 @@ import {
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { FinanceChart, type FinanceChartPoint } from '@/components/admin/charts/finance-chart';
+import { PieBreakdown } from '@/components/admin/charts/pie-breakdown';
 import { KpiCard } from '@/components/admin/kpi-card';
 import { NoPermission } from '@/components/admin/no-permission';
 import { PeriodFilter } from '@/components/admin/period-filter';
@@ -94,6 +96,30 @@ export default async function FinanceiroPage({
       .map((metodo) => PAYMENT_METHOD_LABELS[metodo.method])
       .filter((rotulo) => rotulo !== PAYMENT_GROUP_LABELS[grupo])
       .join(', ');
+
+  const pontosDoGrafico: FinanceChartPoint[] = resumo.daily.map((dia) => ({
+    key: dia.date,
+    label: formatDateBR(dia.date).slice(0, 5),
+    grossCents: dia.grossCents,
+    refundsCents: dia.refundsCents,
+    netCents: dia.netCents,
+  }));
+  const recebidoPorForma = resumo.byGroup
+    .filter((grupo) => grupo.grossCents > 0)
+    .sort((a, b) => b.grossCents - a.grossCents)
+    .map((grupo) => ({
+      key: grupo.group,
+      label: PAYMENT_GROUP_LABELS[grupo.group],
+      value: grupo.grossCents,
+    }));
+  // Semana a partir da segunda; valor bruto pelo dia em que o pagamento foi aprovado.
+  const diasDaSemana = [1, 2, 3, 4, 5, 6, 0].map((diaDaSemana) => {
+    const dias = resumo.daily.filter((dia) => weekdayOf(dia.date) === diaDaSemana);
+    const bruto = dias.reduce((soma, dia) => soma + dia.grossCents, 0);
+    const comVenda = dias.filter((dia) => dia.grossCents > 0).length;
+    return { diaDaSemana, bruto, media: comVenda > 0 ? Math.round(bruto / comVenda) : 0 };
+  });
+  const maiorDaSemana = Math.max(0, ...diasDaSemana.map((dia) => dia.bruto));
 
   return (
     <div className="grid gap-6">
@@ -192,6 +218,67 @@ export default async function FinanceiroPage({
 
       <Card>
         <CardHeader
+          title="Receita por dia"
+          description="Quanto entrou, quanto foi devolvido e o líquido de cada dia do período."
+        />
+        <CardContent className="pt-3">
+          {diasComMovimento.length === 0 ? (
+            <p className="py-10 text-center text-sm text-ink-500">Nenhum movimento no período.</p>
+          ) : (
+            <FinanceChart points={pontosDoGrafico} />
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            title="Recebido por forma de pagamento"
+            description="Participação de cada forma no valor bruto do período."
+          />
+          <CardContent className="pt-3">
+            <PieBreakdown money slices={recebidoPorForma} emptyText="Nenhum pagamento no período." />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Receita por dia da semana"
+            description="Valor bruto recebido em cada dia da semana e a média dos dias com venda."
+          />
+          <CardContent className="pt-3">
+            {maiorDaSemana === 0 ? (
+              <p className="py-10 text-center text-sm text-ink-500">Nenhum pagamento no período.</p>
+            ) : (
+              <ul className="grid gap-3.5">
+                {diasDaSemana.map((dia) => (
+                  <li
+                    key={dia.diaDaSemana}
+                    className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[13px]"
+                  >
+                    <span className="font-medium text-ink-700">{WEEKDAY_SHORT_LABELS[dia.diaDaSemana]}</span>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-ink-100">
+                      <div
+                        className="h-full rounded-full bg-pool-500"
+                        style={{ width: `${(dia.bruto / maiorDaSemana) * 100}%` }}
+                      />
+                    </div>
+                    <span className="tabular text-right">
+                      <span className="font-semibold text-ink-900">{formatBRL(dia.bruto)}</span>
+                      <span className="block text-xs text-ink-500">
+                        {dia.media > 0 ? `média de ${formatBRL(dia.media)} por dia` : 'sem vendas'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader
           title="Por forma de pagamento"
           description="Pagamentos aprovados no período, reembolsos feitos no período e taxas."
         />
@@ -265,7 +352,7 @@ export default async function FinanceiroPage({
         </CardContent>
       </Card>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Dia a dia"
