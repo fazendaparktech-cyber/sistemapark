@@ -67,7 +67,12 @@ describe('matriz padrão (docs/ARQUITETURA.md, seção 13)', () => {
     const bilheteria = defaultPermissionsFor('BOX_OFFICE');
     for (const permissao of ['pos.sell', 'orders.view', 'customers.view', 'tickets.view'] as const)
       expect(bilheteria).toContain(permissao);
-    for (const permissao of ['orders.cancel', 'refunds.approve', 'dashboard.financial', 'finance.view'] as const)
+    for (const permissao of [
+      'orders.cancel',
+      'refunds.approve',
+      'dashboard.financial',
+      'finance.view',
+    ] as const)
       expect(bilheteria).not.toContain(permissao);
   });
 
