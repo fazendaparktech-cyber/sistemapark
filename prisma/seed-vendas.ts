@@ -250,84 +250,24 @@ export async function seedVendas(
     },
   });
 
-  // Tipos de ingresso e regras de preço (preços do site antigo do parque).
+  // Ingresso único: um valor para todas as idades.
   const definicoes = [
     {
-      slug: 'adulto',
-      name: 'Adulto',
-      description: 'A partir de 12 anos.',
+      slug: 'ingresso',
+      name: 'Ingresso',
+      description: 'Entrada no parque para uma pessoa. Valor único para todas as idades.',
       category: 'ADULT' as const,
-      basePriceCents: 7000,
-      minAge: 12,
-      maxAge: null,
-      holderData: 'NAME' as const,
-      precos: [
-        { name: 'Fim de semana e feriado', priceCents: 8000, dayKinds: ['WEEKEND', 'HOLIDAY'] as DayKind[] },
-      ],
-    },
-    {
-      slug: 'infantil',
-      name: 'Infantil',
-      description: 'De 3 a 11 anos. Criança acompanhada de um adulto.',
-      category: 'CHILD' as const,
-      basePriceCents: 4500,
-      minAge: 3,
-      maxAge: 11,
-      holderData: 'NAME_BIRTHDATE' as const,
-      precos: [
-        { name: 'Fim de semana e feriado', priceCents: 5000, dayKinds: ['WEEKEND', 'HOLIDAY'] as DayKind[] },
-      ],
-    },
-    {
-      slug: 'meia-entrada',
-      name: 'Meia-entrada',
-      description: 'Estudantes, pessoas com deficiência e idosos, com documento.',
-      category: 'HALF' as const,
-      basePriceCents: 3500,
+      basePriceCents: 2000,
       minAge: null,
       maxAge: null,
       holderData: 'NAME' as const,
-      requiresDocument: true,
-      documentHint: 'Carteira de estudante, ID Jovem, documento de idoso ou laudo',
-      precos: [
-        { name: 'Fim de semana e feriado', priceCents: 4000, dayKinds: ['WEEKEND', 'HOLIDAY'] as DayKind[] },
-      ],
-    },
-    {
-      slug: 'crianca-de-colo',
-      name: 'Criança de colo',
-      description: 'Até 2 anos, no colo de um adulto. Gratuito.',
-      category: 'CHILD' as const,
-      basePriceCents: 0,
-      minAge: 0,
-      maxAge: 2,
-      holderData: 'NAME_BIRTHDATE' as const,
-      occupiesCapacity: false,
-      maxPerOrder: 4,
-      precos: [],
-    },
-    {
-      slug: 'combo-familia',
-      name: 'Combo Família',
-      description: 'Quatro pessoas: dois adultos e duas crianças de até 11 anos.',
-      category: 'FAMILY' as const,
-      basePriceCents: 22000,
-      minAge: null,
-      maxAge: null,
-      holderData: 'NAME' as const,
-      peoplePerTicket: 4,
-      channels: ['ONLINE'] as const,
-      maxPerOrder: 2,
-      precos: [
-        {
-          name: 'Lote promocional',
-          priceCents: 19900,
-          compareAtCents: 22000,
-          dayKinds: [] as DayKind[],
-          lotQuantity: 60,
-          priority: 10,
-        },
-      ],
+      requiresDocument: false,
+      documentHint: null,
+      occupiesCapacity: true,
+      peoplePerTicket: 1,
+      maxPerOrder: null,
+      channels: ['ONLINE', 'POS'] as ('ONLINE' | 'POS')[],
+      precos: [] as { name: string; priceCents: number; dayKinds: DayKind[] }[],
     },
   ];
 
@@ -344,26 +284,23 @@ export async function seedVendas(
         minAge: definicao.minAge,
         maxAge: definicao.maxAge,
         holderData: definicao.holderData,
-        requiresDocument: 'requiresDocument' in definicao ? definicao.requiresDocument : false,
-        documentHint: 'documentHint' in definicao ? definicao.documentHint : null,
-        occupiesCapacity: 'occupiesCapacity' in definicao ? definicao.occupiesCapacity : true,
-        peoplePerTicket: 'peoplePerTicket' in definicao ? definicao.peoplePerTicket : 1,
-        maxPerOrder: 'maxPerOrder' in definicao ? definicao.maxPerOrder : null,
-        channels: 'channels' in definicao && definicao.channels ? [...definicao.channels] : ['ONLINE', 'POS'],
+        requiresDocument: definicao.requiresDocument,
+        documentHint: definicao.documentHint,
+        occupiesCapacity: definicao.occupiesCapacity,
+        peoplePerTicket: definicao.peoplePerTicket,
+        maxPerOrder: definicao.maxPerOrder,
+        channels: definicao.channels,
         sortOrder: indice + 1,
-        rulesText:
-          definicao.category === 'HALF'
-            ? 'Apresente na entrada o documento que comprova o direito à meia-entrada.'
-            : null,
+        rulesText: null,
         createdAt: criadoEm(addDays(hoje, -90), 10),
         prices: {
           create: definicao.precos.map((preco) => ({
             name: preco.name,
             priceCents: preco.priceCents,
-            compareAtCents: 'compareAtCents' in preco ? preco.compareAtCents : null,
+            compareAtCents: null,
             dayKinds: preco.dayKinds,
-            lotQuantity: 'lotQuantity' in preco ? preco.lotQuantity : null,
-            priority: 'priority' in preco ? preco.priority : 0,
+            lotQuantity: null,
+            priority: 0,
             createdAt: criadoEm(addDays(hoje, -90), 10),
           })),
         },
@@ -395,9 +332,8 @@ export async function seedVendas(
       })),
     });
   }
-  const [adulto, infantil, meia, colo, combo] = tipos;
-  if (!adulto || !infantil || !meia || !colo || !combo)
-    throw new Error('Tipos de ingresso do seed incompletos.');
+  const [ingresso] = tipos;
+  if (!ingresso) throw new Error('Tipo de ingresso do seed não foi criado.');
 
   // Calendário: quinta a domingo e feriados abertos; segunda a quarta fechados.
   const dias = new Map<DateOnly, DiaCriado>();
@@ -464,7 +400,7 @@ export async function seedVendas(
     data: {
       parkId: parque.id,
       code: 'CRIANCAS15',
-      description: 'Semana das Crianças: 15% nos ingressos infantis',
+      description: 'Semana das Crianças: 15% no ingresso',
       discountType: 'PERCENT',
       percentBps: 1500,
       startsAt: criadoEm(addDays(hoje, 14), 0),
@@ -473,7 +409,7 @@ export async function seedVendas(
       visitUntil: dateOnlyToDb(addDays(hoje, 35)),
       channels: ['ONLINE'],
       createdById: equipe.admin,
-      ticketTypes: { create: [{ ticketTypeId: infantil.id }] },
+      ticketTypes: { create: [{ ticketTypeId: ingresso.id }] },
     },
   });
   await db.coupon.create({
@@ -602,15 +538,7 @@ export async function seedVendas(
         });
       };
 
-      if (canal === 'ONLINE' && chance(0.08)) {
-        adicionar(combo, 1);
-        if (chance(0.3)) adicionar(adulto, 1);
-      } else {
-        adicionar(adulto, escolher([1, 1, 2, 2, 2, 2, 3, 4]));
-        adicionar(infantil, escolher([0, 0, 1, 1, 2, 2, 3]));
-        if (chance(0.14)) adicionar(meia, inteiro(1, 2));
-        if (chance(0.12)) adicionar(colo, 1);
-      }
+      adicionar(ingresso, escolher([1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6]));
 
       const subtotal = itens.reduce((soma, item) => soma + item.unitario * item.quantidade, 0);
       let cupom: Planejado['cupom'] = null;
@@ -657,8 +585,8 @@ export async function seedVendas(
     for (let n = 0; n < 3; n++) {
       const instante = new Date(agora.getTime() - (4 + n * 3) * 60_000);
       const unitario = resolvePrice({
-        basePriceCents: adulto.basePriceCents,
-        rules: adulto.regras,
+        basePriceCents: ingresso.basePriceCents,
+        rules: ingresso.regras,
         visitDate: proximoSabado.date,
         dayKindOverride: proximoSabado.dayKind,
         now: instante,
@@ -671,7 +599,7 @@ export async function seedVendas(
         canal: 'ONLINE',
         itens: [
           {
-            tipo: adulto,
+            tipo: ingresso,
             quantidade: 2,
             unitario: unitario.priceCents,
             regraId: unitario.ruleId,

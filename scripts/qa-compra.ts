@@ -78,11 +78,9 @@ async function main(): Promise<void> {
     await passo('1-calendario');
     await dia.click();
 
-    const maisAdulto = page.getByRole('button', { name: 'Adicionar um Adulto' });
-    await maisAdulto.waitFor({ timeout: 30_000 });
-    await maisAdulto.click();
-    await maisAdulto.click();
-    await page.getByRole('button', { name: 'Adicionar um Infantil' }).click();
+    const maisIngresso = page.getByRole('button', { name: 'Adicionar um Ingresso' });
+    await maisIngresso.waitFor({ timeout: 30_000 });
+    for (let i = 0; i < 3; i++) await maisIngresso.click();
     await passo('2-ingressos');
     await page.getByRole('button', { name: 'Continuar' }).click();
 

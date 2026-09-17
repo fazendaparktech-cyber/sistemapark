@@ -136,8 +136,8 @@ Cada ingresso vale para uma pessoa, somente na data escolhida na compra, e dá d
 2. QR Code
 O ingresso é o QR Code liberado depois da confirmação do pagamento. Ele pode ser usado uma única vez: a primeira leitura na portaria libera a entrada e qualquer cópia deixa de valer. Não compartilhe o QR Code.
 
-3. Meia-entrada e categorias com desconto
-Ingressos de meia-entrada, idoso e outras categorias com desconto exigem documento que comprove o direito, apresentado na entrada.
+3. Valor do ingresso
+O ingresso tem valor único por pessoa, igual para todas as idades.
 
 4. Crianças
 Crianças devem estar acompanhadas de um responsável maior de idade durante toda a permanência no parque.

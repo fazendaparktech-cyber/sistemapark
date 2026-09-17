@@ -1,4 +1,13 @@
-import { CalendarDays, ChevronRight, MapPin, MessageCircle, QrCode, ShieldCheck, Ticket } from 'lucide-react';
+import {
+  Check,
+  CalendarDays,
+  ChevronRight,
+  MapPin,
+  MessageCircle,
+  QrCode,
+  ShieldCheck,
+  Ticket,
+} from 'lucide-react';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -74,6 +83,7 @@ export default async function InicioPage() {
 
   const precosPagos = (oferta?.ticketTypes ?? []).map((tipo) => tipo.priceCents).filter((preco) => preco > 0);
   const aPartirDe = precosPagos.length > 0 ? Math.min(...precosPagos) : null;
+  const unico = oferta?.ticketTypes.length === 1 ? oferta.ticketTypes[0] : undefined;
   const cidade = perfil?.city ? `${perfil.city}${perfil.state ? ` - ${perfil.state}` : ''}` : null;
   const endereco = [perfil?.addressLine, cidade].filter(Boolean).join(', ');
 
@@ -115,7 +125,7 @@ export default async function InicioPage() {
           </div>
           {aPartirDe !== null ? (
             <p className="mt-6 text-sm text-ink-200">
-              Ingressos a partir de <span className="font-semibold text-white">{formatBRL(aPartirDe)}</span>
+              Ingresso a partir de <span className="font-semibold text-white">{formatBRL(aPartirDe)}</span>
             </p>
           ) : null}
         </div>
@@ -237,19 +247,62 @@ export default async function InicioPage() {
                 id="precos"
                 className="font-display text-3xl font-semibold tracking-[-0.02em] text-ink-950 sm:text-4xl"
               >
-                Ingressos e preços
+                {unico ? 'Ingresso' : 'Ingressos e preços'}
               </h2>
               <p className="mt-3 max-w-2xl text-base leading-7 text-ink-600">
-                {oferta
-                  ? `Valores para ${formatDateLong(oferta.date)}. Os preços podem variar entre dias úteis, fins de semana e feriados; o valor de cada data aparece no calendário de compra.`
-                  : 'Os preços de cada data aparecem no calendário de compra.'}
+                {unico
+                  ? 'Valor único por pessoa, para todas as idades. Escolha a data da visita e pague com PIX.'
+                  : oferta
+                    ? `Valores para ${formatDateLong(oferta.date)}. Os preços podem variar entre dias úteis, fins de semana e feriados; o valor de cada data aparece no calendário de compra.`
+                    : 'Os preços de cada data aparecem no calendário de compra.'}
               </p>
             </div>
             <Link href="/comprar" className={buttonClasses('cta', 'lg')}>
               Escolher data
             </Link>
           </div>
-          {oferta && oferta.ticketTypes.length > 0 ? (
+          {oferta && unico ? (
+            <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-ink-200/70">
+              <div className="grid gap-8 p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-ink-900">{unico.name}</h3>
+                  {unico.description ? (
+                    <p className="mt-2 max-w-xl text-[15px] leading-6 text-ink-600">{unico.description}</p>
+                  ) : null}
+                  <ul className="mt-5 grid gap-2.5 text-[15px] text-ink-700 sm:grid-cols-2">
+                    {[
+                      'Vale para a data escolhida na compra',
+                      'Pagamento por PIX',
+                      'Ingresso com QR Code no celular',
+                      'Entrada direto na portaria',
+                    ].map((item) => (
+                      <li key={item} className="flex items-center gap-2.5">
+                        <Check className="size-4 shrink-0 text-pool-600" aria-hidden />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl bg-canvas p-6 text-center md:min-w-64">
+                  {unico.compareAtCents ? (
+                    <p className="tabular text-sm text-ink-400 line-through">
+                      {formatBRL(unico.compareAtCents)}
+                    </p>
+                  ) : null}
+                  <p className="tabular font-display text-5xl font-semibold tracking-[-0.02em] text-ink-950">
+                    {formatBRL(unico.priceCents)}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-500">por pessoa</p>
+                  <Link
+                    href={`/comprar?data=${oferta.date}`}
+                    className={cn(buttonClasses('cta', 'lg'), 'mt-5 w-full')}
+                  >
+                    Comprar ingresso
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : oferta && oferta.ticketTypes.length > 0 ? (
             <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {oferta.ticketTypes.map((tipo) => (
                 <li
