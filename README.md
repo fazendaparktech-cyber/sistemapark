@@ -1,173 +1,139 @@
 # Sistema Conquista Park
 
-Sistema de venda de ingressos, portaria, bilheteria, caixa e gestão do **Conquista Park**, parque aquático em
-Ubatã, Bahia.
+Venda de ingressos e gestão do **Conquista Park**, parque aquático em Ubatã, Bahia: site de compra com PIX e
+QR Code, portaria, venda no balcão e painel administrativo.
 
-> **Situação:** venda online completa (site, carrinho, PIX de teste, ingressos com QR Code) e painel de gestão
-> (indicadores, pedidos, clientes, cupons, ingressos e preços, calendário, configurações). Próximas etapas:
-> provedor de pagamento real, portaria e bilheteria. A arquitetura e o plano estão em
-> [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+## Sumário
 
-## O que já funciona
+- [Visão geral](#visão-geral)
+- [Tecnologias](#tecnologias)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Como rodar localmente](#como-rodar-localmente)
+- [Comandos](#comandos)
+- [Banco de dados](#banco-de-dados)
+- [Variáveis de ambiente](#variáveis-de-ambiente)
+- [Publicação](#publicação)
+- [Pendências para produção](#pendências-para-produção)
 
-### Site de vendas
+## Visão geral
 
-| Página | O que faz |
+### Site do cliente
+
+| Rota | Função |
 |---|---|
-| `/` | Apresentação do parque, próximas datas abertas, preços do dia, dúvidas frequentes |
-| `/comprar` | Calendário com situação e preço de cada dia, escolha dos ingressos, vagas seguradas enquanto a pessoa preenche os dados |
-| `/comprar/dados` | Dados do comprador e de cada visitante, cupom, aceite dos termos, contagem do tempo da reserva |
-| `/pedido/<número>?t=<token>` | PIX (QR Code e copia e cola) com acompanhamento automático; depois do pagamento, os ingressos com QR Code |
-| `/meus-ingressos` | Reenvio dos links dos pedidos para o e-mail da compra |
-| `/politicas/...` e `/contato` | Cancelamento, termos, privacidade (editáveis no painel) e canais de atendimento |
+| `/` | Apresentação do parque, ingresso único, próximas datas e dúvidas frequentes |
+| `/comprar` | Calendário de datas abertas, quantidade de ingressos e vagas reservadas durante a compra |
+| `/comprar/dados` | Dados do comprador e dos visitantes, cupom e aceite dos termos |
+| `/pedido/<número>` | Pagamento PIX e, após a confirmação, ingressos com QR Code |
+| `/meus-ingressos` | Consulta dos ingressos comprados |
+| `/politicas`, `/contato` | Termos, privacidade, cancelamento e contato |
 
-Links de campanha (`utm_source`, `utm_campaign`…) e links com data ou ingresso já escolhidos (`?data=`,
-`?ingresso=`) são registrados no pedido e aparecem no painel.
+### Painel administrativo (`/admin`)
 
-### Painel (`/admin`)
-
-| Área | O que faz |
+| Seção | Função |
 |---|---|
-| Painel | Receita, pedidos, ingressos, valor médio, clientes novos, conversão, entradas e descontos, com comparação ao período anterior; vendas por dia, tipo, canal, forma de pagamento, horário e dia da visita; hoje no parque; ocupação dos próximos 14 dias; cupons e origens; últimos pedidos |
-| Pedidos | Busca por número, nome, e-mail, CPF ou código do ingresso; filtros; planilha; ficha com itens, ingressos, pagamentos e histórico; cancelar, reembolsar, reenviar e-mail, gerar novo link, consultar pagamento |
-| Clientes | Identificados pelo CPF (guardado só como HMAC); total em compras, pedidos, ingressos e visitas; edição e planilha |
-| Cupons | Percentual ou valor fixo, teto, compra mínima, validade, datas de visita, dias da semana, limite total e por CPF, primeira compra, canais e ingressos; usos, descontos e vendas |
-| Ingressos e preços | Tipos de ingresso (idade, dados dos visitantes, documento, pessoas por ingresso, cotas e limites), regras de preço por tipo de dia, período, janela de venda e lote; link da página de compra e gerador de links de campanha |
-| Calendário | Mês com lotação e ocupação; configurar período (abrir ou fechar vários dias); editar dia, feriado ou evento. Dia com venda não fecha nem fica com lotação menor que o vendido |
-| Configurações | Prontidão para vender, regras da venda online, dados do parque e políticas |
-| Equipe, Permissões, Auditoria | Acesso por papéis (9 papéis, matriz editável), trilha imutável de todas as alterações |
+| Dashboard | Faturamento, vendas, visitantes, ocupação e últimas vendas |
+| Vendas | Pedidos online e no balcão, cancelamento, reembolso e reenvio |
+| Ingressos | Busca de ingressos e QR Codes |
+| Clientes | Cadastro, histórico e perfil do público (cidades, regiões e idades) |
+| Tipos de ingresso | Preço, regras e disponibilidade |
+| Cupons | Descontos com limite de uso, datas e canais |
+| Calendário | Dias abertos, horários, capacidade e preços especiais, com configuração por período |
+| Portaria / Check-in | Leitura de QR Code e entrada manual |
+| Financeiro | Receitas x despesas, métricas de ingressos e lançamentos |
+| Relatórios | Vendas, faturamento, pagamentos, visitantes, cupons e origem, com exportação CSV e Excel |
+| Marketing / Rastreamento | Funil de compra, origem das vendas (UTM) e pixels |
+| Atividades | Registro das ações feitas no sistema |
+| Configurações | Parque, funcionamento, vendas online, pagamentos, políticas, comunicação, integrações e conta |
 
-### Regras que o servidor garante
+## Tecnologias
 
-- Preço, desconto e total sempre calculados no servidor, nunca aceitos do navegador.
-- Lotação por dia com trava: compras simultâneas não vendem além das vagas; reserva vencida devolve a vaga sozinha.
-- Cupom com limite de usos travado contra pedidos simultâneos; limites por CPF e por pedido.
-- Pagamento confirmado só com a situação consultada no provedor; aviso repetido não é processado duas vezes;
-  pagamento fora do prazo confirma se ainda houver vaga, senão o pedido fica marcado para devolução.
-- QR Code assinado (`CP1.<código>.<assinatura>`), sem dado pessoal; link do pedido com token que pode ser revogado.
+Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS 4, Prisma 7, PostgreSQL 17, Vitest e
+Recharts.
 
-## Stack
+## Estrutura do projeto
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL 17 · Prisma 7 · Zod · argon2 ·
-pino · Radix · Recharts · Vitest · Playwright. Detalhes e motivos na
-[seção 2 da arquitetura](docs/ARQUITETURA.md#2-stack).
+```text
+prisma/              schema, migrations e seeds
+scripts/             banco local, conta do painel, permissões e roteiros de QA
+src/app/(site)/      páginas públicas de compra
+src/app/admin/       painel administrativo
+src/app/api/         rotas da API
+src/components/      componentes de interface (site, admin e ui)
+src/lib/             regras compartilhadas entre servidor e navegador
+src/server/          regras de negócio por módulo (vendas, pagamentos, financeiro, portaria...)
+src/proxy.ts         segurança das rotas e cabeçalhos (CSP)
+tests/               testes unitários e de integração
+docs/                arquitetura e decisões
+```
 
-## Rodando no computador
-
-Pré-requisito: Node.js 22.12 ou mais novo (recomendado 24). Não precisa de Docker.
+## Como rodar localmente
 
 ```bash
 npm install
-cp .env.example .env
-
-npm run db:local      # terminal 1 — Postgres local; deixe aberto
-npm run db:migrate    # terminal 2 — cria as tabelas
-npm run db:seed       # equipe, ingressos, calendário, clientes, cupons e dois meses de vendas fictícias
-npm run dev
+cp .env.example .env     # preencha as chaves locais
+npm run db:local         # sobe o PostgreSQL local (deixe este terminal aberto)
+npm run db:migrate       # aplica as migrations
+npm run db:seed          # dados de exemplo
+npm run admin:create     # cria a conta do painel
+npm run dev              # http://localhost:3000
 ```
-
-- Site: <http://localhost:3000>. No PIX de teste, a página do pedido tem o botão **Simular pagamento aprovado**.
-- Painel: <http://localhost:3000/entrar> com `admin@conquistapark.dev` e a senha `Parque-Dev-2026!` (existe só no
-  banco local; o seed se recusa a rodar em qualquer outro banco e não altera dados que já existam).
-- Com `EMAIL_PROVIDER=mock`, os e-mails aparecem no terminal do `npm run dev`.
 
 ## Comandos
 
-| Comando | Para quê |
+| Comando | Função |
 |---|---|
 | `npm run dev` | Servidor de desenvolvimento |
-| `npm run build` / `npm start` | Build e servidor de produção |
-| `npm run typecheck` · `npm run lint` · `npm run format` | Qualidade de código |
-| `npm run test:unit` | Regras puras: dinheiro, datas, CPF, permissões, preço, cupom, filtros, CSV |
-| `npm run test:integration` | Testes com banco real (sobem um Postgres 17 descartável): compra, lotação e cupom concorrentes, webhooks, vencimento, reembolso, permissões |
-| `npm run db:local` | Postgres local de desenvolvimento |
-| `npm run db:migrate` | Aplica as migrations (`prisma migrate deploy`) |
-| `npm run db:seed` | Dados fictícios (só banco local) |
-| `npm run access:sync` | Leva o catálogo de papéis e permissões para o banco |
-| `npm run admin:create` | Cria o primeiro super admin com senha forte gerada |
-| `npx tsx --conditions=react-server scripts/qa-capturas.ts` | Capturas de todas as telas no computador e no celular, apontando erro de console e página mais larga que a tela |
-| `npx tsx --conditions=react-server scripts/qa-compra.ts` | Compra de ponta a ponta pela interface, até os ingressos com QR Code |
-
-## Rotina agendada
-
-`POST /api/cron/expire-sales` a cada 5 minutos, com o cabeçalho `Authorization: Bearer <CRON_SECRET>`. Vence
-carrinhos e pedidos não pagos, libera cupons e cobranças e, antes de vencer, consulta o provedor para recuperar
-pagamento cujo aviso tenha se perdido. A vaga de uma reserva vencida já é devolvida no instante do vencimento,
-mesmo antes da rotina.
+| `npm run build` / `npm run start` | Build e execução de produção |
+| `npm run typecheck` | Verificação de tipos |
+| `npm run lint` | ESLint |
+| `npm run format` / `npm run format:check` | Prettier |
+| `npm run test` | Todos os testes (`test:unit` e `test:integration` separados) |
+| `npm run db:local` | PostgreSQL local de desenvolvimento |
+| `npm run db:migrate` | Aplica as migrations |
+| `npm run db:generate` | Gera o cliente do Prisma |
+| `npm run db:seed` | Dados de exemplo (somente desenvolvimento) |
+| `npm run access:sync` | Sincroniza permissões e perfis com o banco |
+| `npm run admin:create` | Cria a conta de acesso ao painel |
 
 ## Banco de dados
 
-- Toda mudança estrutural vira migration versionada em `prisma/migrations`, revisada antes de ir para produção.
-- Para criar uma migration: altere `prisma/schema.prisma` e gere o SQL com
-  `npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script`.
-  Revise o SQL. **Tabela nova precisa de `ENABLE ROW LEVEL SECURITY`** — um teste de integração falha se esquecer.
-- Regras que o Prisma não expressa (CHECK, triggers, RLS) ficam no SQL da migration.
-- Em produção só se usa `npm run db:migrate`. Nunca `prisma migrate reset`, `prisma migrate dev` ou `prisma db push`
-  apontando para produção.
-- Os testes de integração só conectam em Postgres local com banco `*_test` — há uma trava no código.
-
-## Primeiro acesso em produção
-
-Com `DATABASE_URL` e `DIRECT_URL` do banco de produção configurados:
-
-```bash
-npm run db:migrate
-npm run access:sync -- --confirmar-banco <host-do-banco>
-npm run admin:create -- --nome "Nome Completo" --email pessoa@dominio.com.br --confirmar-banco <host-do-banco>
-```
-
-O último comando mostra uma senha temporária uma única vez; no primeiro login o sistema pede uma senha nova.
-Scripts que gravam em banco que não é local exigem `--confirmar-banco` com o host exato.
+- Migrations em `prisma/migrations`, aplicadas com `npm run db:migrate`.
+- Todas as tabelas com RLS ativo: o acesso aos dados acontece somente pelo servidor.
+- Valores em centavos e datas no fuso `America/Bahia`.
+- Nunca rode seed, testes ou scripts de escrita em banco de produção.
 
 ## Variáveis de ambiente
 
-Todas estão documentadas em [`.env.example`](.env.example). O sistema valida a configuração ao iniciar e não sobe
-se faltar algo. Segredos nunca vão para o repositório.
+Modelo em [`.env.example`](.env.example). Nunca coloque chaves reais no repositório.
 
 | Variável | Uso |
 |---|---|
-| `APP_URL` | Endereço público (https em produção) |
-| `PARK_SLUG` | Parque vendido pelo site desta instalação |
-| `DATABASE_URL` | Conexão da aplicação (pooler, porta 6543 no Supabase) |
-| `DIRECT_URL` | Conexão direta, usada pelas migrations |
-| `SHADOW_DATABASE_URL` | Banco auxiliar para criar migrations (só desenvolvimento) |
-| `DB_POOL_MAX` | Conexões simultâneas por instância |
-| `LOG_LEVEL` | Detalhe dos logs |
-| `EMAIL_PROVIDER` · `EMAIL_FROM` · `RESEND_API_KEY` | Envio de e-mails |
-| `PAYMENT_PROVIDER` | `mock` (teste). Em produção, sem provedor real, o site não vende |
-| `QR_SIGNING_KEY` · `ORDER_LINK_KEY` · `CPF_HASH_KEY` · `CRON_SECRET` | Chaves do QR Code, dos links de pedido, do CPF e da rotina. Obrigatórias em produção; guarde cópia fora do servidor |
+| `APP_URL` | Endereço público do sistema |
+| `PARK_SLUG` | Identificador do parque |
+| `DATABASE_URL` | Conexão com o banco (pool) |
+| `DIRECT_URL` | Conexão direta, usada nas migrations |
+| `SHADOW_DATABASE_URL` | Banco auxiliar do Prisma em desenvolvimento |
+| `DB_POOL_MAX` | Limite de conexões |
+| `LOG_LEVEL` | Nível de log |
+| `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY` | Envio de e-mails |
+| `PAYMENT_PROVIDER` | Provedor de pagamento (`mock` em desenvolvimento) |
+| `QR_SIGNING_KEY`, `ORDER_LINK_KEY`, `CPF_HASH_KEY` | Chaves de segurança (valores longos e aleatórios) |
+| `CRON_SECRET` | Autenticação das tarefas agendadas |
 
-## Estrutura
+## Publicação
 
-```text
-docs/                 arquitetura e decisões
-prisma/               schema, migrations e seed (seed-vendas.ts: dados de vendas fictícios)
-scripts/              Postgres local, primeiro admin, permissões, capturas e teste de compra
-src/app/(site)/       site de vendas
-src/app/admin/        painel
-src/app/api/          rotas: admin/, public/, webhooks/, cron/
-src/components/       design system (ui/), painel (admin/) e site (site/)
-src/lib/              regras puras compartilhadas: dinheiro, datas, CPF, preço, cupom, pedidos, permissões
-src/server/           serviços: catalog, calendar, sales, payments, orders, customers, coupons, dashboard, settings
-tests/                unitários, integração e utilitários de teste
-```
+1. Banco PostgreSQL no Supabase (região São Paulo).
+2. Variáveis de ambiente configuradas no provedor de hospedagem.
+3. A cada publicação: `npm run db:migrate` e `npm run access:sync`.
 
-## Plano
+## Pendências para produção
 
-| Fase | Entrega | Situação |
-|---|---|---|
-| 1 | Base técnica, autenticação, banco e design system | Concluída |
-| 2 | Datas, capacidades e tipos de ingresso | Concluída |
-| 3 | Site, carrinho e checkout | Concluída |
-| 4 | Pedidos e pagamentos | Concluída com PIX de teste; falta o provedor real (Asaas) |
-| 5 | Emissão e QR Code | QR assinado, página e e-mail concluídos; faltam troca de titular e reemissão |
-| 6 | Portaria e check-in | Próxima |
-| 7 | Dashboard e relatórios | Painel de vendas concluído; relatórios detalhados em aberto |
-| 8 | Financeiro, bilheteria e caixa | — |
-| 9 | WhatsApp e e-mail | E-mails de pedido prontos; WhatsApp em aberto |
-| 10 | Auditoria, segurança e melhorias | — |
-| 11 | Testes, otimização e produção | — |
+- Projeto Supabase próprio do sistema
+- Provedor de PIX real (Asaas)
+- Provedor de e-mail (Resend)
+- Domínio com HTTPS
+- Dados reais do parque e revisão das políticas
+- Aviso de cookies (LGPD) antes de ativar os pixels
 
----
-
-Uso restrito ao Conquista Park.
+A arquitetura detalhada está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
